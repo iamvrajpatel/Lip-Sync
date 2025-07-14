@@ -504,6 +504,7 @@ import shutil
 import uuid
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import torch
 
@@ -520,17 +521,27 @@ from inference import perform_inference
 
 app = FastAPI()
 
-def save_upload(tmp_dir: str, upload: UploadFile, filename: str) -> str:
-    path = os.path.join(tmp_dir, filename)
-    with open(path, "wb") as f:
+# Allow CORS if you’re calling from a web front-end
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or lock down to your domains
+    allow_methods=["POST"],
+    allow_headers=["*"],
+)
+
+def save_upload(tmp_dir: str, upload: UploadFile) -> str:
+    """Save UploadFile to disk and return path."""
+    ext = os.path.splitext(upload.filename)[1]
+    out_path = os.path.join(tmp_dir, f"{uuid.uuid4().hex}{ext}")
+    with open(out_path, "wb") as f:
         shutil.copyfileobj(upload.file, f)
-    return path
+    return out_path
 
 @app.get("/")
 async def root():
     return {"status": "Lip-Sync Running!!"}
 
-@app.post("/generate-video")
+@app.post("/generate-from-video")
 async def lip_sync(
     video: UploadFile = File(..., description=".mp4 file"),
     audio: UploadFile = File(..., description=".wav/.mp3/.aac/.flac"),
@@ -602,6 +613,154 @@ async def lip_sync(
         torch.cuda.empty_cache()
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
+# ==========================================================
+# **************** VIDEO FROM IMAGE ***********************
+# ==========================================================
+
+
+def convert_video_fps(input_path, target_fps):
+    if not os.path.exists(input_path) or os.path.getsize(input_path) == 0:
+        print(f"Error: The video file {input_path} is missing or empty.")
+        return None
+
+    output_path = f"converted_{target_fps}fps.mp4"
+
+    audio_check_cmd = [
+        "ffprobe", "-i", input_path, "-show_streams", "-select_streams", "a",
+        "-loglevel", "error"
+    ]
+    audio_present = subprocess.run(audio_check_cmd, capture_output=True, text=True).stdout.strip() != ""
+
+    cmd = [
+        "ffmpeg", "-y", "-i", input_path,
+        "-filter:v", f"fps={target_fps}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+    ]
+
+    if audio_present:
+        cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+    else:
+        cmd.append("-an")
+
+    cmd.append(output_path)
+
+    subprocess.run(cmd, check=True)
+    print(f"Converted video saved as {output_path}")
+    return output_path
+
+# def add_silent_frames(audio_path, target_fps=25):
+
+#     waveform, sample_rate = torchaudio.load(audio_path)
+#     silent_duration = 25 / target_fps  # Two frames at target FPS
+#     silent_samples = int(silent_duration * sample_rate)
+#     silent_waveform = torch.zeros((waveform.shape[0], silent_samples))
+
+#     # Concatenate silence at the beginning for mouth correction
+#     new_waveform = torch.cat((silent_waveform, waveform), dim=1)
+#     new_audio_path = "audio_with_silence.wav"
+#     torchaudio.save(new_audio_path, new_waveform, sample_rate)
+
+#     return new_audio_path
+
+
+def pad_audio_to_multiple_of_16(audio_path, target_fps=25):
+
+    # audio_path = add_silent_frames(audio_path)
+
+    waveform, sample_rate = torchaudio.load(audio_path)
+    audio_duration = waveform.shape[1] / sample_rate  # Duration in seconds
+
+    num_frames = int(audio_duration * target_fps)
+
+    # Pad audio to ensure frame count is a multiple of 16
+    remainder = num_frames % 16
+    if remainder > 0:
+        pad_frames = 16 - remainder
+        pad_samples = int((pad_frames / target_fps) * sample_rate)
+        pad_waveform = torch.zeros((waveform.shape[0], pad_samples))  # Silence padding
+        waveform = torch.cat((waveform, pad_waveform), dim=1)
+
+        # Save the padded audio
+        padded_audio_path = "padded_audio.wav"
+        torchaudio.save(padded_audio_path, waveform, sample_rate)
+    else:
+        padded_audio_path = audio_path  # No padding needed
+
+    padded_duration = waveform.shape[1] / sample_rate
+    padded_num_frames = int(padded_duration * target_fps)
+
+    return padded_audio_path, padded_num_frames
+
+
+def create_video_from_image(image_path, output_video_path, num_frames, fps=25):
+    """Convert an image into a video of specified length (num_frames at 25 FPS)."""
+    img = cv2.imread(image_path)
+    if img is None:
+        print("Error: Unable to read the image.")
+        return None
+
+    height, width, _ = img.shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video_writer = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+
+    for _ in range(num_frames):
+        video_writer.write(img)
+
+    video_writer.release()
+    print(f"Created video {output_video_path} with {num_frames} frames ({num_frames / fps:.2f} seconds).")
+    return output_video_path
+
+@app.post("/generate-from-image", response_class=FileResponse)
+async def generate_lipsync(
+    image: UploadFile = File(...),
+    audio: UploadFile = File(...),
+    seed: int = Form(1247),
+    steps: int = Form(20),
+    guidance_scale: float = Form(1.0),
+    output_fps: int = Form(25),
+):
+    # create a temp working dir
+    workdir = os.path.join("/tmp", uuid.uuid4().hex)
+    os.makedirs(workdir, exist_ok=True)
+
+    try:
+        # Save uploads
+        image_path = save_upload(workdir, image)
+        audio_path = save_upload(workdir, audio)
+
+        # Pad audio & get frame count
+        padded_audio, num_frames = pad_audio_to_multiple_of_16(audio_path, target_fps=output_fps)
+
+        # Build a static video from the image
+        raw_video = os.path.join(workdir, "input_video.mp4")
+        create_video_from_image(image_path, raw_video, num_frames, fps=output_fps)
+
+        # Run your inference
+        generated = os.path.join(workdir, "gen_video.mp4")
+        perform_inference(
+            raw_video,
+            padded_audio,
+            seed,
+            steps,
+            guidance_scale,
+            generated
+        )
+
+        # Re-encode at requested FPS
+        final_video = convert_video_fps(generated, output_fps)
+        if final_video is None or not os.path.exists(final_video):
+            raise HTTPException(status_code=500, detail="Failed to convert output video")
+
+        # Return the file
+        return FileResponse(
+            final_video,
+            media_type="video/mp4",
+            filename="lipsync_output.mp4"
+        )
+
+    finally:
+        # cleanup
+        shutil.rmtree(workdir, ignore_errors=True)
 
 if __name__ == "__main__":
     import uvicorn
