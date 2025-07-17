@@ -75,8 +75,7 @@ The easiest way to set up the environment and download all required models is to
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Isi-dev/LatentSync.git
-   cd LatentSync
+   git clone https://github.com/iamvrajpatel/Lip-Sync.git
    ```
 
 2. **Ensure you are using Python 3.11.9:**
