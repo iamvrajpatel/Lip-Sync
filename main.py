@@ -175,7 +175,7 @@ def get_video_duration(video_path):
         return 0
 
 
-def pad_audio_to_multiple_of_16(audio_path, target_fps=25):
+def pad_audio_to_multiple_of_16_for_video(audio_path, target_fps=25):
     waveform, sample_rate = torchaudio.load(audio_path)
     audio_duration = waveform.shape[1] / sample_rate
     num_frames = int(audio_duration * target_fps)
@@ -579,7 +579,7 @@ async def lip_sync(
             raise RuntimeError(f"Error while normalizing video FPS : {e}")
 
         # 4) Pad audio & get durations
-        proc_audio, num_frames, audio_dur = pad_audio_to_multiple_of_16(audio_path, target_fps=25)
+        proc_audio, num_frames, audio_dur = pad_audio_to_multiple_of_16_for_video(audio_path, target_fps=25)
         video_dur = get_video_duration(proc_video)
 
         # 5) Sync lengths
@@ -663,7 +663,7 @@ def convert_video_fps(input_path, target_fps):
 #     return new_audio_path
 
 
-def pad_audio_to_multiple_of_16(audio_path, target_fps=25):
+def pad_audio_to_multiple_of_16_for_audio(audio_path, target_fps=25):
 
     # audio_path = add_silent_frames(audio_path)
 
@@ -729,7 +729,7 @@ async def generate_lipsync(
         audio_path = save_upload(workdir, audio)
 
         # Pad audio & get frame count
-        padded_audio, num_frames = pad_audio_to_multiple_of_16(audio_path, target_fps=output_fps)
+        padded_audio, num_frames = pad_audio_to_multiple_of_16_for_audio(audio_path, target_fps=output_fps)
 
         # Build a static video from the image
         raw_video = os.path.join(workdir, "input_video.mp4")
