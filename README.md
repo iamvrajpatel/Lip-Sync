@@ -73,25 +73,7 @@ lip-sync/
 
 The easiest way to set up the environment and download all required models is to use the provided `create_env.py` script.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/iamvrajpatel/Lip-Sync.git
-   ```
 
-2. **Ensure you are using Python 3.11.9:**
-   ```bash
-   python --version
-   # If not 3.11.9, create a new virtual environment with Python 3.11.9
-   ```
-
-3. **Run the environment setup script:**
-   ```bash
-   python create_env.py
-   ```
-   This script will:
-   - Install all required Python packages (from `LatentSync/requirements.txt`).
-   - Download all necessary model checkpoints and auxiliary files.
-   - Set up directory structure.
 
 **Note:** If you encounter permission issues, try running with `python -m pip ...` or as administrator.
 
@@ -105,12 +87,32 @@ If you prefer to install dependencies manually:
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-2. **Install requirements:**
+2. **Clone the repository:**
+   ```bash
+   git clone https://github.com/iamvrajpatel/Lip-Sync.git
+   ```
+
+3. **Ensure you are using Python 3.11.9:**
+   ```bash
+   python --version
+   # If not 3.11.9, create a new virtual environment with Python 3.11.9
+   ```
+
+4. **Run the environment setup script:**
+   ```bash
+   python create_env.py
+   ```
+   This script will:
+   - Install all required Python packages (from `LatentSync/requirements.txt`).
+   - Download all necessary model checkpoints and auxiliary files.
+   - Set up directory structure.
+
+5. **Install requirements:**
    ```bash
    pip install -r LatentSync/requirements.txt
    ```
 
-3. **Download model checkpoints:**
+6. **Download model checkpoints:**
    - Download the required model files as listed in `create_env.py` and place them in the appropriate directories (`checkpoints/`, `/root/.cache/torch/hub/checkpoints/`, etc.).
 
 ---
@@ -128,7 +130,7 @@ python inference.py --video_path <input_video.mp4> --audio_path <input_audio.wav
 Or use the Gradio web UI:
 
 ```bash
-python gradio_app.py
+python gradio_app.py   # In /LatentSync Folder
 ```
 This will launch a browser interface for uploading video and audio files.
 
@@ -145,8 +147,8 @@ This will start a FastAPI server at `http://127.0.0.1:8000`.
 **Example: Generate a video using the API with `curl`:**
 ```bash
 curl --location 'http://127.0.0.1:8000/generate-video' \
---form 'video=@"/C:/Users/Vraj.Patel/Downloads/demo_input.mp4"' \
---form 'audio=@"/C:/Users/Vraj.Patel/Downloads/desired_output_audio.mp3"' \
+--form 'video=@"<video-path>"' \
+--form 'audio=@"<audio-path>"' \
 --form 'seed="1247"' \
 --form 'num_steps="40"' \
 --form 'guidance_scale="1.0"' \
