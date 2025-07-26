@@ -171,6 +171,9 @@ Evaluation scripts are provided in the `LatentSync/eval/` directory, including F
 
 ---
 
+## Used Configuration of GPU
+- [Used RunPod Configuration](https://console.runpod.io/deploy?gpu=RTX%20A4500&count=1&template=runpod-torch-v280)
+
 ## Citation
 
 If you use this codebase, please cite the corresponding paper (see [arXiv link](https://arxiv.org/pdf/2412.09262)).
