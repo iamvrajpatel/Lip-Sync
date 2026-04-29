@@ -1,7 +1,10 @@
+import asyncio
 import gc
 import logging
+import mimetypes
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -35,6 +38,7 @@ BASE_DIR = Path(__file__).resolve().parent
 TMP_ROOT = BASE_DIR / "tmp"
 TEMPLATE_DIR = BASE_DIR / "templates"
 PROCESSING_FPS = 25
+JOB_RETENTION_SECONDS = 60 * 60
 loop_vid_from_endframe = True
 
 TMP_ROOT.mkdir(exist_ok=True)
@@ -50,6 +54,10 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "X-Processing-Time"],
 )
 
+job_store_lock = threading.Lock()
+job_store: dict[str, dict[str, object]] = {}
+job_tasks: set[asyncio.Task] = set()
+
 
 def get_processing_headers(duration_seconds: float) -> dict[str, str]:
     return {
@@ -63,6 +71,18 @@ def normalize_base_url(base_url: str | None) -> str | None:
         return None
     trimmed = base_url.strip()
     return trimmed.rstrip("/") if trimmed else None
+
+
+def resolve_execution_mode(base_url: str | None, request: Request | None = None) -> tuple[str, str | None]:
+    normalized_base_url = normalize_base_url(base_url)
+    if not normalized_base_url:
+        return "local", None
+
+    request_base_url = normalize_base_url(str(request.base_url)) if request else None
+    if request_base_url and normalized_base_url == request_base_url:
+        return "local", None
+
+    return "proxy", normalized_base_url
 
 
 def log_request_timing(
@@ -88,6 +108,108 @@ def cleanup_job_dir(job_dir: Path) -> None:
     shutil.rmtree(job_dir, ignore_errors=True)
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
+
+def cleanup_expired_jobs() -> None:
+    cutoff = time.time() - JOB_RETENTION_SECONDS
+    expired_jobs: list[tuple[str, Path]] = []
+
+    with job_store_lock:
+        for job_id, job in list(job_store.items()):
+            status = str(job.get("status", "queued"))
+            updated_at = float(job.get("updated_at", job.get("created_at", 0.0)))
+            if status in {"completed", "failed"} and updated_at < cutoff:
+                expired_jobs.append((job_id, Path(str(job["job_dir"]))))
+                job_store.pop(job_id, None)
+
+    for _, job_dir in expired_jobs:
+        cleanup_job_dir(job_dir)
+
+
+def create_job_record(
+    route_name: str,
+    mode: str,
+    base_url: str | None,
+    result_filename: str,
+    media_type: str = "video/mp4",
+) -> dict[str, object]:
+    cleanup_expired_jobs()
+
+    job_id = uuid.uuid4().hex
+    created_at = time.time()
+    job_dir = TMP_ROOT / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    job = {
+        "job_id": job_id,
+        "route_name": route_name,
+        "mode": mode,
+        "base_url": base_url,
+        "status": "queued",
+        "error": None,
+        "created_at": created_at,
+        "updated_at": created_at,
+        "started_at": None,
+        "completed_at": None,
+        "duration_seconds": None,
+        "job_dir": str(job_dir),
+        "result_path": None,
+        "result_filename": result_filename,
+        "media_type": media_type,
+    }
+
+    with job_store_lock:
+        job_store[job_id] = job
+
+    return dict(job)
+
+
+def delete_job_record(job_id: str) -> None:
+    with job_store_lock:
+        job = job_store.pop(job_id, None)
+
+    if job:
+        cleanup_job_dir(Path(str(job["job_dir"])))
+
+
+def update_job_record(job_id: str, **updates: object) -> None:
+    with job_store_lock:
+        job = job_store.get(job_id)
+        if not job:
+            return
+        job.update(updates)
+        job["updated_at"] = time.time()
+
+
+def get_job_record(job_id: str) -> dict[str, object] | None:
+    with job_store_lock:
+        job = job_store.get(job_id)
+        return dict(job) if job else None
+
+
+def serialize_job_record(job: dict[str, object]) -> dict[str, object]:
+    status = str(job["status"])
+    duration_seconds = job.get("duration_seconds")
+    return {
+        "job_id": job["job_id"],
+        "route_name": job["route_name"],
+        "mode": job["mode"],
+        "status": status,
+        "error": job.get("error"),
+        "duration_seconds": round(float(duration_seconds), 3) if duration_seconds is not None else None,
+        "result_filename": job["result_filename"],
+        "download_url": f"/jobs/{job['job_id']}/download" if status == "completed" else None,
+        "status_url": f"/jobs/{job['job_id']}",
+        "poll_after_ms": 3000 if status in {"queued", "processing"} else 0,
+        "created_at": job["created_at"],
+        "updated_at": job["updated_at"],
+    }
+
+
+def schedule_job(coro) -> None:
+    task = asyncio.create_task(coro)
+    job_tasks.add(task)
+    task.add_done_callback(job_tasks.discard)
 
 
 def save_upload(tmp_dir: Path, upload: UploadFile) -> Path:
@@ -348,6 +470,25 @@ def build_local_file_response(
     return response
 
 
+def build_job_file_response(file_path: Path, filename: str, duration_seconds: float, media_type: str) -> FileResponse:
+    return FileResponse(
+        str(file_path),
+        media_type=media_type,
+        filename=filename,
+        headers=get_processing_headers(duration_seconds),
+    )
+
+
+def format_upstream_error(status_code: int, body_text: str) -> str:
+    stripped = body_text.strip()
+    if not stripped:
+        return "Upstream request failed"
+    lowered = stripped.lower()
+    if "<html" in lowered or "<!doctype html" in lowered:
+        return f"Upstream request failed with status {status_code}. The remote server likely timed out before returning the video."
+    return stripped
+
+
 async def proxy_request(
     route_path: str,
     base_url: str,
@@ -375,7 +516,7 @@ async def proxy_request(
         upstream_response = await client.post(target_url, data=form_fields, files=files)
 
     if upstream_response.status_code >= 400:
-        detail = upstream_response.text.strip() or "Upstream request failed"
+        detail = format_upstream_error(upstream_response.status_code, upstream_response.text)
         try:
             payload = upstream_response.json()
             if isinstance(payload, dict) and "detail" in payload:
@@ -396,8 +537,124 @@ async def proxy_request(
     )
 
 
+async def proxy_request_to_file(
+    route_path: str,
+    base_url: str,
+    uploads: dict[str, Path],
+    form_fields: dict[str, str],
+    output_path: Path,
+) -> tuple[Path, str]:
+    target_url = urljoin(f"{base_url}/", route_path.lstrip("/"))
+    timeout = httpx.Timeout(connect=30.0, read=None, write=None, pool=None)
+    file_handles = []
+
+    try:
+        files = {}
+        for field_name, upload_path in uploads.items():
+            file_obj = upload_path.open("rb")
+            file_handles.append(file_obj)
+            files[field_name] = (
+                upload_path.name,
+                file_obj,
+                mimetypes.guess_type(upload_path.name)[0] or "application/octet-stream",
+            )
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", target_url, data=form_fields, files=files) as upstream_response:
+                if upstream_response.status_code >= 400:
+                    body = (await upstream_response.aread()).decode("utf-8", errors="replace")
+                    detail = format_upstream_error(upstream_response.status_code, body)
+                    raise HTTPException(status_code=upstream_response.status_code, detail=detail)
+
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with output_path.open("wb") as file_obj:
+                    async for chunk in upstream_response.aiter_bytes():
+                        file_obj.write(chunk)
+
+                media_type = upstream_response.headers.get("content-type", "video/mp4")
+                return output_path, media_type
+    finally:
+        for file_obj in file_handles:
+            file_obj.close()
+
+
 def resolve_num_steps(num_steps: int | None, steps: int | None, default_value: int = 40) -> int:
     return num_steps if num_steps is not None else (steps if steps is not None else default_value)
+
+
+def generate_video_to_file(
+    video_path: Path,
+    audio_path: Path,
+    seed: int,
+    num_steps: int,
+    guidance_scale: float,
+    output_fps: int,
+    job_dir: Path,
+) -> Path:
+    detect_video_size(video_path)
+
+    processing_video = convert_video_fps(video_path, PROCESSING_FPS, job_dir / "processing_video.mp4")
+    padded_audio_path, _, audio_duration = pad_audio_to_multiple_of_16_for_video(
+        audio_path,
+        PROCESSING_FPS,
+        job_dir / "padded_audio.wav",
+    )
+    video_duration = get_video_duration(processing_video)
+
+    if audio_duration > video_duration:
+        processing_video = extend_video(processing_video, audio_duration, job_dir)
+        video_duration = get_video_duration(processing_video)
+        if video_duration > audio_duration:
+            processing_video = trim_video(processing_video, audio_duration, job_dir / "trimmed_video.mp4")
+    elif video_duration > audio_duration:
+        processing_video = trim_video(processing_video, audio_duration, job_dir / "trimmed_video.mp4")
+
+    inference_output = job_dir / "inference_output.mp4"
+    perform_inference(
+        str(processing_video),
+        str(padded_audio_path),
+        seed,
+        num_steps,
+        guidance_scale,
+        str(inference_output),
+    )
+
+    return convert_video_fps(inference_output, output_fps, job_dir / "output_video.mp4")
+
+
+def generate_image_to_file(
+    image_path: Path,
+    audio_path: Path,
+    seed: int,
+    num_steps: int,
+    guidance_scale: float,
+    output_fps: int,
+    job_dir: Path,
+) -> Path:
+    padded_audio_path, num_frames = pad_audio_to_multiple_of_16_for_audio(
+        audio_path,
+        PROCESSING_FPS,
+        job_dir / "padded_audio.wav",
+    )
+
+    raw_video = create_video_from_image(
+        image_path,
+        job_dir / "input_video.mp4",
+        num_frames,
+        fps=PROCESSING_FPS,
+    )
+
+    inference_output = job_dir / "generated_video.mp4"
+    perform_inference(
+        str(raw_video),
+        str(padded_audio_path),
+        seed,
+        num_steps,
+        guidance_scale,
+        str(inference_output),
+    )
+
+    return convert_video_fps(inference_output, output_fps, job_dir / "lipsync_output.mp4")
 
 
 def run_local_video_generation(
@@ -419,36 +676,15 @@ def run_local_video_generation(
 
         video_path = save_upload(job_dir, video)
         audio_path = save_upload(job_dir, audio)
-
-        detect_video_size(video_path)
-
-        processing_video = convert_video_fps(video_path, PROCESSING_FPS, job_dir / "processing_video.mp4")
-        padded_audio_path, _, audio_duration = pad_audio_to_multiple_of_16_for_video(
+        final_output = generate_video_to_file(
+            video_path,
             audio_path,
-            PROCESSING_FPS,
-            job_dir / "padded_audio.wav",
-        )
-        video_duration = get_video_duration(processing_video)
-
-        if audio_duration > video_duration:
-            processing_video = extend_video(processing_video, audio_duration, job_dir)
-            video_duration = get_video_duration(processing_video)
-            if video_duration > audio_duration:
-                processing_video = trim_video(processing_video, audio_duration, job_dir / "trimmed_video.mp4")
-        elif video_duration > audio_duration:
-            processing_video = trim_video(processing_video, audio_duration, job_dir / "trimmed_video.mp4")
-
-        inference_output = job_dir / "inference_output.mp4"
-        perform_inference(
-            str(processing_video),
-            str(padded_audio_path),
             seed,
             num_steps,
             guidance_scale,
-            str(inference_output),
+            output_fps,
+            job_dir,
         )
-
-        final_output = convert_video_fps(inference_output, output_fps, job_dir / "output_video.mp4")
         return build_local_file_response(
             final_output,
             "output_video.mp4",
@@ -480,31 +716,15 @@ def run_local_image_generation(
 
         image_path = save_upload(job_dir, image)
         audio_path = save_upload(job_dir, audio)
-
-        padded_audio_path, num_frames = pad_audio_to_multiple_of_16_for_audio(
-            audio_path,
-            PROCESSING_FPS,
-            job_dir / "padded_audio.wav",
-        )
-
-        raw_video = create_video_from_image(
+        final_output = generate_image_to_file(
             image_path,
-            job_dir / "input_video.mp4",
-            num_frames,
-            fps=PROCESSING_FPS,
-        )
-
-        inference_output = job_dir / "generated_video.mp4"
-        perform_inference(
-            str(raw_video),
-            str(padded_audio_path),
+            audio_path,
             seed,
             num_steps,
             guidance_scale,
-            str(inference_output),
+            output_fps,
+            job_dir,
         )
-
-        final_output = convert_video_fps(inference_output, output_fps, job_dir / "lipsync_output.mp4")
         return build_local_file_response(
             final_output,
             "lipsync_output.mp4",
@@ -517,6 +737,150 @@ def run_local_image_generation(
         raise
 
 
+async def process_video_job(
+    job_id: str,
+    route_name: str,
+    mode: str,
+    base_url: str | None,
+    video_path: Path,
+    audio_path: Path,
+    seed: int,
+    num_steps: int,
+    guidance_scale: float,
+    video_scale: float,
+    output_fps: int,
+) -> None:
+    started_at = time.perf_counter()
+    update_job_record(job_id, status="processing", started_at=time.time(), error=None)
+    job = get_job_record(job_id)
+    if not job:
+        return
+
+    job_dir = Path(str(job["job_dir"]))
+
+    try:
+        if mode == "proxy" and base_url:
+            result_path, media_type = await proxy_request_to_file(
+                route_name,
+                base_url,
+                {"video": video_path, "audio": audio_path},
+                {
+                    "seed": str(seed),
+                    "num_steps": str(num_steps),
+                    "guidance_scale": str(guidance_scale),
+                    "video_scale": str(video_scale),
+                    "output_fps": str(output_fps),
+                },
+                job_dir / "output_video.mp4",
+            )
+        else:
+            result_path = await asyncio.to_thread(
+                generate_video_to_file,
+                video_path,
+                audio_path,
+                seed,
+                num_steps,
+                guidance_scale,
+                output_fps,
+                job_dir,
+            )
+            media_type = "video/mp4"
+
+        duration_seconds = time.perf_counter() - started_at
+        update_job_record(
+            job_id,
+            status="completed",
+            completed_at=time.time(),
+            duration_seconds=duration_seconds,
+            result_path=str(result_path),
+            media_type=media_type,
+            error=None,
+        )
+        log_request_timing(route_name, mode, base_url, True, duration_seconds)
+    except Exception as exc:
+        duration_seconds = time.perf_counter() - started_at
+        update_job_record(
+            job_id,
+            status="failed",
+            completed_at=time.time(),
+            duration_seconds=duration_seconds,
+            error=str(exc),
+        )
+        log_request_timing(route_name, mode, base_url, False, duration_seconds, str(exc))
+
+
+async def process_image_job(
+    job_id: str,
+    route_name: str,
+    mode: str,
+    base_url: str | None,
+    image_path: Path,
+    audio_path: Path,
+    seed: int,
+    num_steps: int,
+    guidance_scale: float,
+    video_scale: float,
+    output_fps: int,
+) -> None:
+    started_at = time.perf_counter()
+    update_job_record(job_id, status="processing", started_at=time.time(), error=None)
+    job = get_job_record(job_id)
+    if not job:
+        return
+
+    job_dir = Path(str(job["job_dir"]))
+
+    try:
+        if mode == "proxy" and base_url:
+            result_path, media_type = await proxy_request_to_file(
+                route_name,
+                base_url,
+                {"image": image_path, "audio": audio_path},
+                {
+                    "seed": str(seed),
+                    "num_steps": str(num_steps),
+                    "guidance_scale": str(guidance_scale),
+                    "video_scale": str(video_scale),
+                    "output_fps": str(output_fps),
+                },
+                job_dir / "lipsync_output.mp4",
+            )
+        else:
+            result_path = await asyncio.to_thread(
+                generate_image_to_file,
+                image_path,
+                audio_path,
+                seed,
+                num_steps,
+                guidance_scale,
+                output_fps,
+                job_dir,
+            )
+            media_type = "video/mp4"
+
+        duration_seconds = time.perf_counter() - started_at
+        update_job_record(
+            job_id,
+            status="completed",
+            completed_at=time.time(),
+            duration_seconds=duration_seconds,
+            result_path=str(result_path),
+            media_type=media_type,
+            error=None,
+        )
+        log_request_timing(route_name, mode, base_url, True, duration_seconds)
+    except Exception as exc:
+        duration_seconds = time.perf_counter() - started_at
+        update_job_record(
+            job_id,
+            status="failed",
+            completed_at=time.time(),
+            duration_seconds=duration_seconds,
+            error=str(exc),
+        )
+        log_request_timing(route_name, mode, base_url, False, duration_seconds, str(exc))
+
+
 @app.get("/")
 async def root():
     return {"status": "Lip-Sync Running!!"}
@@ -527,8 +891,132 @@ async def ui_page(request: Request):
     return templates.TemplateResponse(request, "lipsync.html", {})
 
 
+@app.post("/jobs/generate-from-video", status_code=202)
+async def submit_video_job(
+    request: Request,
+    video: UploadFile = File(..., description=".mp4 file"),
+    audio: UploadFile = File(..., description=".wav/.mp3/.aac/.flac"),
+    base_url: str | None = Form(None),
+    seed: int = Form(1247),
+    num_steps: int = Form(40, ge=1, le=100),
+    guidance_scale: float = Form(1.0, ge=0.1, le=10.0),
+    video_scale: float = Form(0.8, ge=0.1, le=1.0),
+    output_fps: int = Form(30, ge=6, le=60),
+):
+    route_name = "/generate-from-video"
+    mode, normalized_base_url = resolve_execution_mode(base_url, request)
+    job = create_job_record(route_name, mode, normalized_base_url, "output_video.mp4")
+    job_id = str(job["job_id"])
+    job_dir = Path(str(job["job_dir"]))
+
+    try:
+        video.file.seek(0)
+        audio.file.seek(0)
+        video_path = save_upload(job_dir, video)
+        audio_path = save_upload(job_dir, audio)
+    except Exception:
+        delete_job_record(job_id)
+        raise
+
+    schedule_job(
+        process_video_job(
+            job_id,
+            route_name,
+            mode,
+            normalized_base_url,
+            video_path,
+            audio_path,
+            seed,
+            num_steps,
+            guidance_scale,
+            video_scale,
+            output_fps,
+        )
+    )
+    return serialize_job_record(get_job_record(job_id) or job)
+
+
+@app.post("/jobs/generate-from-image", status_code=202)
+async def submit_image_job(
+    request: Request,
+    image: UploadFile = File(...),
+    audio: UploadFile = File(...),
+    base_url: str | None = Form(None),
+    seed: int = Form(1247),
+    num_steps: int | None = Form(None, ge=1, le=100),
+    steps: int | None = Form(None, ge=1, le=100),
+    guidance_scale: float = Form(1.0, ge=0.1, le=10.0),
+    video_scale: float = Form(0.8, ge=0.1, le=1.0),
+    output_fps: int = Form(30, ge=6, le=60),
+):
+    resolved_num_steps = resolve_num_steps(num_steps, steps)
+    route_name = "/generate-from-image"
+    mode, normalized_base_url = resolve_execution_mode(base_url, request)
+    job = create_job_record(route_name, mode, normalized_base_url, "lipsync_output.mp4")
+    job_id = str(job["job_id"])
+    job_dir = Path(str(job["job_dir"]))
+
+    try:
+        image.file.seek(0)
+        audio.file.seek(0)
+        image_path = save_upload(job_dir, image)
+        audio_path = save_upload(job_dir, audio)
+    except Exception:
+        delete_job_record(job_id)
+        raise
+
+    schedule_job(
+        process_image_job(
+            job_id,
+            route_name,
+            mode,
+            normalized_base_url,
+            image_path,
+            audio_path,
+            seed,
+            resolved_num_steps,
+            guidance_scale,
+            video_scale,
+            output_fps,
+        )
+    )
+    return serialize_job_record(get_job_record(job_id) or job)
+
+
+@app.get("/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    cleanup_expired_jobs()
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return serialize_job_record(job)
+
+
+@app.get("/jobs/{job_id}/download")
+async def download_job_result(job_id: str):
+    cleanup_expired_jobs()
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if str(job["status"]) != "completed":
+        raise HTTPException(status_code=409, detail="Job result is not ready yet")
+
+    result_path = Path(str(job["result_path"]))
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail="Generated file is no longer available")
+
+    duration_seconds = float(job["duration_seconds"]) if job["duration_seconds"] is not None else 0.0
+    return build_job_file_response(
+        result_path,
+        str(job["result_filename"]),
+        duration_seconds,
+        str(job.get("media_type") or "video/mp4"),
+    )
+
+
 @app.post("/generate-from-video")
 async def generate_from_video(
+    request: Request,
     background_tasks: BackgroundTasks,
     video: UploadFile = File(..., description=".mp4 file"),
     audio: UploadFile = File(..., description=".wav/.mp3/.aac/.flac"),
@@ -540,8 +1028,7 @@ async def generate_from_video(
     output_fps: int = Form(30, ge=6, le=60),
 ):
     route_name = "/generate-from-video"
-    normalized_base_url = normalize_base_url(base_url)
-    mode = "proxy" if normalized_base_url else "local"
+    mode, normalized_base_url = resolve_execution_mode(base_url, request)
     started_at = time.perf_counter()
 
     try:
@@ -583,6 +1070,7 @@ async def generate_from_video(
 
 @app.post("/generate-from-image")
 async def generate_from_image(
+    request: Request,
     background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     audio: UploadFile = File(...),
@@ -596,8 +1084,7 @@ async def generate_from_image(
 ):
     resolved_num_steps = resolve_num_steps(num_steps, steps)
     route_name = "/generate-from-image"
-    normalized_base_url = normalize_base_url(base_url)
-    mode = "proxy" if normalized_base_url else "local"
+    mode, normalized_base_url = resolve_execution_mode(base_url, request)
     started_at = time.perf_counter()
 
     try:

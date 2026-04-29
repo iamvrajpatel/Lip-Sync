@@ -297,14 +297,14 @@
     <div class="shell">
         <section class="hero">
             <h1>Lip-Sync Studio</h1>
-            <p>Use the local API as a simple web console for lip-sync generation. You can run jobs locally or point the same page at another API base URL and let this backend proxy the upload and returned video.</p>
+            <p>Use the local API as a simple web console for lip-sync generation. The page now submits a background job and polls for completion, which avoids browser timeouts on long video generations.</p>
         </section>
 
         <div class="panel base-url-card">
             <div class="panel-inner">
                 <label class="label" for="base-url">Base URL</label>
-                <input id="base-url" name="base_url" type="text" placeholder="Leave blank to use local inference, or enter a remote API base URL">
-                <p class="help">Examples: <code>https://8gxqtbtzdf48p4-8000.proxy.runpod.net</code> or <code>http://172.16.56.182:8000</code></p>
+                <input id="base-url" name="base_url" type="text" placeholder="Leave blank to use this server, or enter a remote API base URL">
+                <p class="help">Leave this blank when the UI is already running on your inference server. Using the same Runpod URL here only adds an extra proxy hop.</p>
             </div>
         </div>
 
@@ -317,7 +317,7 @@
                     </div>
 
                     <div class="tab-panel active" data-panel="video">
-                        <form id="video-form" data-endpoint="/generate-from-video" data-filename="output_video.mp4">
+                        <form id="video-form" data-endpoint="/jobs/generate-from-video" data-filename="output_video.mp4">
                             <div class="form-grid">
                                 <div class="field full">
                                     <label class="label" for="video-file">Video</label>
@@ -356,7 +356,7 @@
                     </div>
 
                     <div class="tab-panel" data-panel="image">
-                        <form id="image-form" data-endpoint="/generate-from-image" data-filename="lipsync_output.mp4">
+                        <form id="image-form" data-endpoint="/jobs/generate-from-image" data-filename="lipsync_output.mp4">
                             <div class="form-grid">
                                 <div class="field full">
                                     <label class="label" for="image-file">Image</label>
@@ -407,7 +407,7 @@
                     </div>
                     <div class="video-shell">
                         <div id="placeholder" class="placeholder">
-                            The generated MP4 will appear here after the request completes.
+                            The generated MP4 will appear here after the background job completes.
                         </div>
                         <video id="result-video" controls playsinline></video>
                     </div>
@@ -433,6 +433,7 @@
         const downloadLinkEl = document.getElementById("download-link");
 
         let currentVideoUrl = null;
+        let activeSubmissionToken = 0;
 
         function setActiveTab(tabName) {
             tabButtons.forEach((button) => {
@@ -472,6 +473,84 @@
             return match ? match[1] : fallbackName;
         }
 
+        async function readErrorMessage(response) {
+            const contentType = response.headers.get("content-type") || "";
+
+            if (contentType.includes("application/json")) {
+                const payload = await response.json();
+                return payload.detail || JSON.stringify(payload);
+            }
+
+            const text = await response.text();
+            return text.trim() || `Request failed with status ${response.status}`;
+        }
+
+        async function loadCompletedJob(job, fallbackFilename) {
+            if (!job.download_url) {
+                throw new Error("Job completed without a download URL.");
+            }
+
+            const response = await fetch(job.download_url, {
+                cache: "no-store"
+            });
+
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response));
+            }
+
+            const blob = await response.blob();
+            currentVideoUrl = URL.createObjectURL(blob);
+            const filename = job.result_filename || extractFilename(response, fallbackFilename);
+
+            resultVideoEl.src = currentVideoUrl;
+            resultVideoEl.style.display = "block";
+            placeholderEl.style.display = "none";
+            downloadLinkEl.href = currentVideoUrl;
+            downloadLinkEl.download = filename;
+            downloadRowEl.style.display = "flex";
+            resultMetaEl.textContent = filename;
+        }
+
+        async function pollJob(statusUrl, fallbackFilename, startedAt, submissionToken) {
+            while (submissionToken === activeSubmissionToken) {
+                const response = await fetch(statusUrl, {
+                    cache: "no-store"
+                });
+
+                if (!response.ok) {
+                    throw new Error(await readErrorMessage(response));
+                }
+
+                const job = await response.json();
+                if (submissionToken !== activeSubmissionToken) {
+                    return;
+                }
+
+                const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
+
+                if (job.status === "completed") {
+                    await loadCompletedJob(job, fallbackFilename);
+                    setStatus("Generation completed successfully.", "success");
+                    timingEl.textContent = job.duration_seconds != null
+                        ? `Server processing time: ${job.duration_seconds}s`
+                        : `Browser round trip: ${elapsedClientSeconds}s`;
+                    return;
+                }
+
+                if (job.status === "failed") {
+                    throw new Error(job.error || "Generation failed");
+                }
+
+                const statusLabel = job.status === "queued" ? "queued" : "processing";
+                setStatus(`Job ${statusLabel}. The server is still working on your video.`, "");
+                timingEl.textContent = `Elapsed: ${elapsedClientSeconds}s`;
+                resultMetaEl.textContent = job.job_id;
+
+                const delayMs = Number(job.poll_after_ms) > 0 ? Number(job.poll_after_ms) : 3000;
+                await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+            }
+        }
+
         async function submitForm(event) {
             event.preventDefault();
 
@@ -489,7 +568,9 @@
             }
 
             resetResult();
-            setStatus("Generating video. This can take a while for large jobs.", "");
+            activeSubmissionToken += 1;
+            const submissionToken = activeSubmissionToken;
+            setStatus("Submitting job. The page will keep polling until the video is ready.", "");
             timingEl.textContent = "";
             resultMetaEl.textContent = endpoint.replace("/", "");
             submitButton.disabled = true;
@@ -502,47 +583,14 @@
                     body: formData
                 });
 
-                const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
-                const serverTime = response.headers.get("x-processing-time");
-
                 if (!response.ok) {
-                    let message = `Request failed with status ${response.status}`;
-                    const contentType = response.headers.get("content-type") || "";
-
-                    if (contentType.includes("application/json")) {
-                        const payload = await response.json();
-                        message = payload.detail || JSON.stringify(payload);
-                    } else {
-                        const text = await response.text();
-                        if (text.trim()) {
-                            message = text.trim();
-                        }
-                    }
-
-                    setStatus(message, "error");
-                    timingEl.textContent = serverTime
-                        ? `Server processing time: ${serverTime}s`
-                        : `Browser round trip: ${elapsedClientSeconds}s`;
-                    resultMetaEl.textContent = "Generation failed";
-                    return;
+                    throw new Error(await readErrorMessage(response));
                 }
 
-                const blob = await response.blob();
-                currentVideoUrl = URL.createObjectURL(blob);
-                const filename = extractFilename(response, fallbackFilename);
-
-                resultVideoEl.src = currentVideoUrl;
-                resultVideoEl.style.display = "block";
-                placeholderEl.style.display = "none";
-                downloadLinkEl.href = currentVideoUrl;
-                downloadLinkEl.download = filename;
-                downloadRowEl.style.display = "flex";
-
-                setStatus("Generation completed successfully.", "success");
-                timingEl.textContent = serverTime
-                    ? `Server processing time: ${serverTime}s`
-                    : `Browser round trip: ${elapsedClientSeconds}s`;
-                resultMetaEl.textContent = filename;
+                const job = await response.json();
+                resultMetaEl.textContent = job.job_id || "Job submitted";
+                setStatus("Job accepted. Polling for completion.", "");
+                await pollJob(job.status_url || `/jobs/${job.job_id}`, fallbackFilename, startedAt, submissionToken);
             } catch (error) {
                 const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
                 setStatus(error.message || "Unexpected request error", "error");
