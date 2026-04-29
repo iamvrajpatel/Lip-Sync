@@ -578,6 +578,95 @@ async def proxy_request_to_file(
             file_obj.close()
 
 
+def build_target_url(base_url: str, route_path: str) -> str:
+    return urljoin(f"{base_url}/", route_path.lstrip("/"))
+
+
+def resolve_remote_url(base_url: str, route_or_url: str) -> str:
+    if route_or_url.startswith("http://") or route_or_url.startswith("https://"):
+        return route_or_url
+    return build_target_url(base_url, route_or_url)
+
+
+async def proxy_job_to_file(
+    submit_route_path: str,
+    base_url: str,
+    uploads: dict[str, Path],
+    form_fields: dict[str, str],
+    output_path: Path,
+) -> tuple[Path, str]:
+    target_url = build_target_url(base_url, submit_route_path)
+    timeout = httpx.Timeout(connect=30.0, read=60.0, write=None, pool=None)
+    file_handles = []
+
+    try:
+        files = {}
+        for field_name, upload_path in uploads.items():
+            file_obj = upload_path.open("rb")
+            file_handles.append(file_obj)
+            files[field_name] = (
+                upload_path.name,
+                file_obj,
+                mimetypes.guess_type(upload_path.name)[0] or "application/octet-stream",
+            )
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            submit_response = await client.post(target_url, data=form_fields, files=files)
+
+            if submit_response.status_code in {404, 405}:
+                raise HTTPException(
+                    status_code=submit_response.status_code,
+                    detail="Remote server does not support async job submission.",
+                )
+
+            if submit_response.status_code >= 400:
+                detail = format_upstream_error(submit_response.status_code, submit_response.text)
+                raise HTTPException(status_code=submit_response.status_code, detail=detail)
+
+            job_payload = submit_response.json()
+            status_url = resolve_remote_url(base_url, str(job_payload.get("status_url") or ""))
+
+            if not status_url:
+                raise RuntimeError("Remote server did not return a status URL.")
+
+            while True:
+                status_response = await client.get(status_url)
+                if status_response.status_code >= 400:
+                    detail = format_upstream_error(status_response.status_code, status_response.text)
+                    raise HTTPException(status_code=status_response.status_code, detail=detail)
+
+                job_status = status_response.json()
+                status = str(job_status.get("status") or "")
+
+                if status == "completed":
+                    download_url = resolve_remote_url(base_url, str(job_status.get("download_url") or ""))
+                    if not download_url:
+                        raise RuntimeError("Remote server completed the job without a download URL.")
+
+                    async with client.stream("GET", download_url) as download_response:
+                        if download_response.status_code >= 400:
+                            body = (await download_response.aread()).decode("utf-8", errors="replace")
+                            detail = format_upstream_error(download_response.status_code, body)
+                            raise HTTPException(status_code=download_response.status_code, detail=detail)
+
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                        with output_path.open("wb") as file_obj:
+                            async for chunk in download_response.aiter_bytes():
+                                file_obj.write(chunk)
+
+                        media_type = download_response.headers.get("content-type", "video/mp4")
+                        return output_path, media_type
+
+                if status == "failed":
+                    raise RuntimeError(str(job_status.get("error") or "Remote generation failed"))
+
+                poll_after_ms = int(job_status.get("poll_after_ms") or 3000)
+                await asyncio.sleep(max(poll_after_ms, 500) / 1000)
+    finally:
+        for file_obj in file_handles:
+            file_obj.close()
+
+
 def resolve_num_steps(num_steps: int | None, steps: int | None, default_value: int = 40) -> int:
     return num_steps if num_steps is not None else (steps if steps is not None else default_value)
 
@@ -760,19 +849,36 @@ async def process_video_job(
 
     try:
         if mode == "proxy" and base_url:
-            result_path, media_type = await proxy_request_to_file(
-                route_name,
-                base_url,
-                {"video": video_path, "audio": audio_path},
-                {
-                    "seed": str(seed),
-                    "num_steps": str(num_steps),
-                    "guidance_scale": str(guidance_scale),
-                    "video_scale": str(video_scale),
-                    "output_fps": str(output_fps),
-                },
-                job_dir / "output_video.mp4",
-            )
+            try:
+                result_path, media_type = await proxy_job_to_file(
+                    "/jobs/generate-from-video",
+                    base_url,
+                    {"video": video_path, "audio": audio_path},
+                    {
+                        "seed": str(seed),
+                        "num_steps": str(num_steps),
+                        "guidance_scale": str(guidance_scale),
+                        "video_scale": str(video_scale),
+                        "output_fps": str(output_fps),
+                    },
+                    job_dir / "output_video.mp4",
+                )
+            except HTTPException as exc:
+                if exc.status_code not in {404, 405}:
+                    raise
+                result_path, media_type = await proxy_request_to_file(
+                    route_name,
+                    base_url,
+                    {"video": video_path, "audio": audio_path},
+                    {
+                        "seed": str(seed),
+                        "num_steps": str(num_steps),
+                        "guidance_scale": str(guidance_scale),
+                        "video_scale": str(video_scale),
+                        "output_fps": str(output_fps),
+                    },
+                    job_dir / "output_video.mp4",
+                )
         else:
             result_path = await asyncio.to_thread(
                 generate_video_to_file,
@@ -832,19 +938,36 @@ async def process_image_job(
 
     try:
         if mode == "proxy" and base_url:
-            result_path, media_type = await proxy_request_to_file(
-                route_name,
-                base_url,
-                {"image": image_path, "audio": audio_path},
-                {
-                    "seed": str(seed),
-                    "num_steps": str(num_steps),
-                    "guidance_scale": str(guidance_scale),
-                    "video_scale": str(video_scale),
-                    "output_fps": str(output_fps),
-                },
-                job_dir / "lipsync_output.mp4",
-            )
+            try:
+                result_path, media_type = await proxy_job_to_file(
+                    "/jobs/generate-from-image",
+                    base_url,
+                    {"image": image_path, "audio": audio_path},
+                    {
+                        "seed": str(seed),
+                        "num_steps": str(num_steps),
+                        "guidance_scale": str(guidance_scale),
+                        "video_scale": str(video_scale),
+                        "output_fps": str(output_fps),
+                    },
+                    job_dir / "lipsync_output.mp4",
+                )
+            except HTTPException as exc:
+                if exc.status_code not in {404, 405}:
+                    raise
+                result_path, media_type = await proxy_request_to_file(
+                    route_name,
+                    base_url,
+                    {"image": image_path, "audio": audio_path},
+                    {
+                        "seed": str(seed),
+                        "num_steps": str(num_steps),
+                        "guidance_scale": str(guidance_scale),
+                        "video_scale": str(video_scale),
+                        "output_fps": str(output_fps),
+                    },
+                    job_dir / "lipsync_output.mp4",
+                )
         else:
             result_path = await asyncio.to_thread(
                 generate_image_to_file,
