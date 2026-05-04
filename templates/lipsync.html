@@ -1,0 +1,613 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lip-Sync Studio</title>
+    <style>
+        :root {
+            --bg: #f4efe5;
+            --panel: rgba(255, 251, 244, 0.92);
+            --panel-strong: #fff9ef;
+            --ink: #2d241b;
+            --muted: #756655;
+            --accent: #c2602f;
+            --accent-dark: #8f3f19;
+            --line: rgba(82, 58, 36, 0.15);
+            --success: #1f7a4d;
+            --error: #b23a2d;
+            --shadow: 0 22px 55px rgba(80, 58, 35, 0.16);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(214, 123, 68, 0.28), transparent 32%),
+                radial-gradient(circle at bottom right, rgba(137, 171, 119, 0.22), transparent 35%),
+                linear-gradient(135deg, #f8f1e6 0%, #efe1cb 45%, #e7d7bf 100%);
+            padding: 32px 18px 56px;
+        }
+
+        .shell {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .hero {
+            margin-bottom: 24px;
+        }
+
+        .hero h1 {
+            margin: 0 0 10px;
+            font-size: clamp(2.2rem, 4vw, 3.4rem);
+            line-height: 0.95;
+            letter-spacing: -0.04em;
+        }
+
+        .hero p {
+            max-width: 740px;
+            margin: 0;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .layout {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-inner {
+            padding: 24px;
+        }
+
+        .base-url-card {
+            margin-bottom: 18px;
+        }
+
+        .label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .help {
+            margin: 8px 0 0;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        input,
+        button {
+            font: inherit;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="file"] {
+            width: 100%;
+            border: 1px solid rgba(82, 58, 36, 0.18);
+            border-radius: 16px;
+            background: var(--panel-strong);
+            color: var(--ink);
+            padding: 14px 16px;
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: rgba(194, 96, 47, 0.55);
+            transform: translateY(-1px);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+
+        .tab-button {
+            border: 0;
+            border-radius: 999px;
+            background: rgba(194, 96, 47, 0.1);
+            color: var(--accent-dark);
+            padding: 12px 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+        }
+
+        .tab-button:hover,
+        .tab-button:focus-visible {
+            transform: translateY(-1px);
+        }
+
+        .tab-button.active {
+            background: linear-gradient(135deg, var(--accent) 0%, #db8858 100%);
+            color: #fffaf5;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        .submit-row {
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .submit-button,
+        .download-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 12px 20px;
+            border-radius: 999px;
+            border: 0;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .submit-button {
+            background: linear-gradient(135deg, var(--accent) 0%, #dc8d58 100%);
+            color: #fffdf8;
+            cursor: pointer;
+        }
+
+        .submit-button:disabled {
+            opacity: 0.65;
+            cursor: progress;
+        }
+
+        .download-link {
+            background: rgba(31, 122, 77, 0.12);
+            color: var(--success);
+        }
+
+        .status {
+            min-height: 24px;
+            margin-top: 14px;
+            font-weight: 700;
+        }
+
+        .status.error {
+            color: var(--error);
+        }
+
+        .status.success {
+            color: var(--success);
+        }
+
+        .timing {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        .result-card {
+            height: 100%;
+        }
+
+        .result-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .result-top h2 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .result-meta {
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .video-shell {
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            background: linear-gradient(135deg, rgba(82, 58, 36, 0.08), rgba(194, 96, 47, 0.12));
+            min-height: 260px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            display: none;
+            width: 100%;
+            max-height: 520px;
+            background: #16120f;
+        }
+
+        .placeholder {
+            padding: 24px;
+            text-align: center;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .download-row {
+            margin-top: 18px;
+            display: none;
+        }
+
+        @media (max-width: 920px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .panel-inner {
+                padding: 20px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <section class="hero">
+            <h1>Lip-Sync Studio</h1>
+            <p>Use the local API as a simple web console for lip-sync generation. The page now submits a background job and polls for completion, which avoids browser timeouts on long video generations.</p>
+        </section>
+
+        <div class="panel base-url-card">
+            <div class="panel-inner">
+                <label class="label" for="base-url">Base URL</label>
+                <input id="base-url" name="base_url" type="text" placeholder="Leave blank to use this server, or enter a remote API base URL">
+                <p class="help">Leave this blank when the UI is already running on your inference server. Using the same Runpod URL here only adds an extra proxy hop.</p>
+            </div>
+        </div>
+
+        <div class="layout">
+            <section class="panel">
+                <div class="panel-inner">
+                    <div class="tabs" role="tablist" aria-label="Generation modes">
+                        <button class="tab-button active" type="button" data-tab="video" role="tab" aria-selected="true">Generate From Video</button>
+                        <button class="tab-button" type="button" data-tab="image" role="tab" aria-selected="false">Generate From Image</button>
+                    </div>
+
+                    <div class="tab-panel active" data-panel="video">
+                        <form id="video-form" data-endpoint="/jobs/generate-from-video" data-filename="output_video.mp4">
+                            <div class="form-grid">
+                                <div class="field full">
+                                    <label class="label" for="video-file">Video</label>
+                                    <input id="video-file" name="video" type="file" accept="video/*" required>
+                                </div>
+                                <div class="field full">
+                                    <label class="label" for="video-audio-file">Audio</label>
+                                    <input id="video-audio-file" name="audio" type="file" accept="audio/*" required>
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="video-seed">Seed</label>
+                                    <input id="video-seed" name="seed" type="number" value="1247" step="1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="video-num-steps">Num Steps</label>
+                                    <input id="video-num-steps" name="num_steps" type="number" value="40" min="1" max="100" step="1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="video-guidance-scale">Guidance Scale</label>
+                                    <input id="video-guidance-scale" name="guidance_scale" type="number" value="1.0" min="0.1" max="10" step="0.1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="video-video-scale">Video Scale</label>
+                                    <input id="video-video-scale" name="video_scale" type="number" value="0.8" min="0.1" max="1.0" step="0.1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="video-output-fps">Output FPS</label>
+                                    <input id="video-output-fps" name="output_fps" type="number" value="30" min="6" max="60" step="1">
+                                </div>
+                            </div>
+
+                            <div class="submit-row">
+                                <button class="submit-button" type="submit">Generate Video</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="tab-panel" data-panel="image">
+                        <form id="image-form" data-endpoint="/jobs/generate-from-image" data-filename="lipsync_output.mp4">
+                            <div class="form-grid">
+                                <div class="field full">
+                                    <label class="label" for="image-file">Image</label>
+                                    <input id="image-file" name="image" type="file" accept="image/*" required>
+                                </div>
+                                <div class="field full">
+                                    <label class="label" for="image-audio-file">Audio</label>
+                                    <input id="image-audio-file" name="audio" type="file" accept="audio/*" required>
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="image-seed">Seed</label>
+                                    <input id="image-seed" name="seed" type="number" value="1247" step="1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="image-num-steps">Num Steps</label>
+                                    <input id="image-num-steps" name="num_steps" type="number" value="40" min="1" max="100" step="1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="image-guidance-scale">Guidance Scale</label>
+                                    <input id="image-guidance-scale" name="guidance_scale" type="number" value="1.0" min="0.1" max="10" step="0.1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="image-video-scale">Video Scale</label>
+                                    <input id="image-video-scale" name="video_scale" type="number" value="0.8" min="0.1" max="1.0" step="0.1">
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="image-output-fps">Output FPS</label>
+                                    <input id="image-output-fps" name="output_fps" type="number" value="30" min="6" max="60" step="1">
+                                </div>
+                            </div>
+
+                            <div class="submit-row">
+                                <button class="submit-button" type="submit">Generate Video</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="status" class="status"></div>
+                    <div id="timing" class="timing"></div>
+                </div>
+            </section>
+
+            <aside class="panel result-card">
+                <div class="panel-inner">
+                    <div class="result-top">
+                        <h2>Generated Video</h2>
+                        <span id="result-meta" class="result-meta">Waiting for a job</span>
+                    </div>
+                    <div class="video-shell">
+                        <div id="placeholder" class="placeholder">
+                            The generated MP4 will appear here after the background job completes.
+                        </div>
+                        <video id="result-video" controls playsinline></video>
+                    </div>
+                    <div id="download-row" class="download-row">
+                        <a id="download-link" class="download-link" href="#" download>Download Video</a>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        const tabButtons = document.querySelectorAll(".tab-button");
+        const tabPanels = document.querySelectorAll(".tab-panel");
+        const forms = document.querySelectorAll("form[data-endpoint]");
+        const baseUrlInput = document.getElementById("base-url");
+        const statusEl = document.getElementById("status");
+        const timingEl = document.getElementById("timing");
+        const resultMetaEl = document.getElementById("result-meta");
+        const placeholderEl = document.getElementById("placeholder");
+        const resultVideoEl = document.getElementById("result-video");
+        const downloadRowEl = document.getElementById("download-row");
+        const downloadLinkEl = document.getElementById("download-link");
+
+        let currentVideoUrl = null;
+        let activeSubmissionToken = 0;
+
+        function setActiveTab(tabName) {
+            tabButtons.forEach((button) => {
+                const active = button.dataset.tab === tabName;
+                button.classList.toggle("active", active);
+                button.setAttribute("aria-selected", String(active));
+            });
+
+            tabPanels.forEach((panel) => {
+                panel.classList.toggle("active", panel.dataset.panel === tabName);
+            });
+        }
+
+        function resetResult() {
+            if (currentVideoUrl) {
+                URL.revokeObjectURL(currentVideoUrl);
+                currentVideoUrl = null;
+            }
+
+            resultVideoEl.pause();
+            resultVideoEl.removeAttribute("src");
+            resultVideoEl.style.display = "none";
+            placeholderEl.style.display = "block";
+            downloadRowEl.style.display = "none";
+            downloadLinkEl.removeAttribute("href");
+            resultMetaEl.textContent = "Waiting for a job";
+        }
+
+        function setStatus(message, kind) {
+            statusEl.textContent = message || "";
+            statusEl.className = `status${kind ? ` ${kind}` : ""}`;
+        }
+
+        function extractFilename(response, fallbackName) {
+            const disposition = response.headers.get("content-disposition") || "";
+            const match = disposition.match(/filename="?([^"]+)"?/i);
+            return match ? match[1] : fallbackName;
+        }
+
+        async function readErrorMessage(response) {
+            const contentType = response.headers.get("content-type") || "";
+
+            if (contentType.includes("application/json")) {
+                const payload = await response.json();
+                return payload.detail || JSON.stringify(payload);
+            }
+
+            const text = await response.text();
+            return text.trim() || `Request failed with status ${response.status}`;
+        }
+
+        async function loadCompletedJob(job, fallbackFilename) {
+            if (!job.download_url) {
+                throw new Error("Job completed without a download URL.");
+            }
+
+            const response = await fetch(job.download_url, {
+                cache: "no-store"
+            });
+
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response));
+            }
+
+            const blob = await response.blob();
+            currentVideoUrl = URL.createObjectURL(blob);
+            const filename = job.result_filename || extractFilename(response, fallbackFilename);
+
+            resultVideoEl.src = currentVideoUrl;
+            resultVideoEl.style.display = "block";
+            placeholderEl.style.display = "none";
+            downloadLinkEl.href = currentVideoUrl;
+            downloadLinkEl.download = filename;
+            downloadRowEl.style.display = "flex";
+            resultMetaEl.textContent = filename;
+        }
+
+        async function pollJob(statusUrl, fallbackFilename, startedAt, submissionToken) {
+            while (submissionToken === activeSubmissionToken) {
+                const response = await fetch(statusUrl, {
+                    cache: "no-store"
+                });
+
+                if (!response.ok) {
+                    throw new Error(await readErrorMessage(response));
+                }
+
+                const job = await response.json();
+                if (submissionToken !== activeSubmissionToken) {
+                    return;
+                }
+
+                const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
+
+                if (job.status === "completed") {
+                    await loadCompletedJob(job, fallbackFilename);
+                    setStatus("Generation completed successfully.", "success");
+                    timingEl.textContent = job.duration_seconds != null
+                        ? `Server processing time: ${job.duration_seconds}s`
+                        : `Browser round trip: ${elapsedClientSeconds}s`;
+                    return;
+                }
+
+                if (job.status === "failed") {
+                    throw new Error(job.error || "Generation failed");
+                }
+
+                const statusLabel = job.status === "queued" ? "queued" : "processing";
+                setStatus(`Job ${statusLabel}. The server is still working on your video.`, "");
+                timingEl.textContent = `Elapsed: ${elapsedClientSeconds}s`;
+                resultMetaEl.textContent = job.job_id;
+
+                const delayMs = Number(job.poll_after_ms) > 0 ? Number(job.poll_after_ms) : 3000;
+                await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+            }
+        }
+
+        async function submitForm(event) {
+            event.preventDefault();
+
+            const form = event.currentTarget;
+            const submitButton = form.querySelector(".submit-button");
+            const baseUrl = baseUrlInput.value.trim();
+            const endpoint = form.dataset.endpoint;
+            const fallbackFilename = form.dataset.filename || "output.mp4";
+            const formData = new FormData(form);
+
+            if (baseUrl) {
+                formData.set("base_url", baseUrl);
+            } else {
+                formData.delete("base_url");
+            }
+
+            resetResult();
+            activeSubmissionToken += 1;
+            const submissionToken = activeSubmissionToken;
+            setStatus("Submitting job. The page will keep polling until the video is ready.", "");
+            timingEl.textContent = "";
+            resultMetaEl.textContent = endpoint.replace("/", "");
+            submitButton.disabled = true;
+
+            const startedAt = performance.now();
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(await readErrorMessage(response));
+                }
+
+                const job = await response.json();
+                resultMetaEl.textContent = job.job_id || "Job submitted";
+                setStatus("Job accepted. Polling for completion.", "");
+                await pollJob(job.status_url || `/jobs/${job.job_id}`, fallbackFilename, startedAt, submissionToken);
+            } catch (error) {
+                const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
+                setStatus(error.message || "Unexpected request error", "error");
+                timingEl.textContent = `Browser round trip: ${elapsedClientSeconds}s`;
+                resultMetaEl.textContent = "Request interrupted";
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+
+        tabButtons.forEach((button) => {
+            button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+        });
+
+        forms.forEach((form) => {
+            form.addEventListener("submit", submitForm);
+        });
+    </script>
+</body>
+</html>

@@ -28,7 +28,7 @@ https://stackoverflow.com/questions/23853632/which-kind-of-interpolation-best-fo
 """
 
 def load_fixed_mask(resolution: int) -> torch.Tensor:
-    mask_image = cv2.imread(r"LatentSync\latentsync\utils\mask.png")
+    mask_image = cv2.imread(r"LatentSync/latentsync/utils/mask.png")
     if mask_image is None:
         raise FileNotFoundError(
             "Could not load mask image at 'latentsync/utils/mask.png'. "
