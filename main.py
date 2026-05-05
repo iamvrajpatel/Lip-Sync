@@ -4,6 +4,7 @@ import logging
 import mimetypes
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -37,6 +38,9 @@ logger = logging.getLogger("lip_sync_api")
 BASE_DIR = Path(__file__).resolve().parent
 TMP_ROOT = BASE_DIR / "tmp"
 TEMPLATE_DIR = BASE_DIR / "templates"
+LIVEPORTRAIT_DIR = BASE_DIR / "LivePortrait"
+LIVEPORTRAIT_INFERENCE_SCRIPT = LIVEPORTRAIT_DIR / "inference.py"
+LIVEPORTRAIT_IDLE_DRIVING_VIDEO = LIVEPORTRAIT_DIR / "assets" / "ideal" / "driving" / "ideal.mp4"
 PROCESSING_FPS = 25
 JOB_RETENTION_SECONDS = 60 * 60
 loop_vid_from_endframe = True
@@ -431,6 +435,50 @@ def pad_audio_to_multiple_of_16_for_audio(
     return padded_audio_path, padded_num_frames
 
 
+def generate_liveportrait_reference_video(image_path: Path, job_dir: Path) -> Path:
+    if not LIVEPORTRAIT_DIR.exists():
+        raise RuntimeError(f"LivePortrait directory is missing: {LIVEPORTRAIT_DIR}")
+    if not LIVEPORTRAIT_INFERENCE_SCRIPT.exists():
+        raise RuntimeError(f"LivePortrait inference script is missing: {LIVEPORTRAIT_INFERENCE_SCRIPT}")
+    if not LIVEPORTRAIT_IDLE_DRIVING_VIDEO.exists():
+        raise RuntimeError(f"LivePortrait idle driving video is missing: {LIVEPORTRAIT_IDLE_DRIVING_VIDEO}")
+
+    output_dir = job_dir / "liveportrait_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        sys.executable,
+        str(LIVEPORTRAIT_INFERENCE_SCRIPT),
+        "-s",
+        str(image_path),
+        "-d",
+        str(LIVEPORTRAIT_IDLE_DRIVING_VIDEO),
+        "-o",
+        str(output_dir),
+    ]
+
+    try:
+        subprocess.run(
+            cmd,
+            cwd=str(LIVEPORTRAIT_DIR),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise RuntimeError(f"LivePortrait reference video generation failed: {details}") from exc
+
+    reference_video = output_dir / f"{image_path.stem}--{LIVEPORTRAIT_IDLE_DRIVING_VIDEO.stem}.mp4"
+    if not reference_video.exists() or reference_video.stat().st_size == 0:
+        raise RuntimeError(
+            f"LivePortrait did not produce the expected reference video: {reference_video}"
+        )
+
+    return reference_video
+
+
 def create_video_from_image(image_path: Path, output_video_path: Path, num_frames: int, fps: int = 25) -> Path:
     image = cv2.imread(str(image_path))
     if image is None:
@@ -720,30 +768,16 @@ def generate_image_to_file(
     output_fps: int,
     job_dir: Path,
 ) -> Path:
-    padded_audio_path, num_frames = pad_audio_to_multiple_of_16_for_audio(
+    reference_video = generate_liveportrait_reference_video(image_path, job_dir)
+    return generate_video_to_file(
+        reference_video,
         audio_path,
-        PROCESSING_FPS,
-        job_dir / "padded_audio.wav",
-    )
-
-    raw_video = create_video_from_image(
-        image_path,
-        job_dir / "input_video.mp4",
-        num_frames,
-        fps=PROCESSING_FPS,
-    )
-
-    inference_output = job_dir / "generated_video.mp4"
-    perform_inference(
-        str(raw_video),
-        str(padded_audio_path),
         seed,
         num_steps,
         guidance_scale,
-        str(inference_output),
+        output_fps,
+        job_dir,
     )
-
-    return convert_video_fps(inference_output, output_fps, job_dir / "lipsync_output.mp4")
 
 
 def run_local_video_generation(
