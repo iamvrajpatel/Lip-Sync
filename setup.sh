@@ -9,4 +9,4 @@ huggingface-cli download KlingTeam/LivePortrait --local-dir pretrained_weights -
 
 
 # Additinal installations
-pip install pykalman==0.9.7 onnx tyro
+pip install pykalman==0.9.7 onnx tyro imageio[ffmpeg]
