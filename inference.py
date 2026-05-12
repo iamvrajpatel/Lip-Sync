@@ -1,5 +1,13 @@
-
+import huggingface_hub
 import torch
+
+
+# Older diffusers releases still import `cached_download` from huggingface_hub.
+# Newer huggingface_hub versions removed that symbol, but a simple alias is
+# sufficient for our local-model usage here.
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+
 from omegaconf import OmegaConf
 from diffusers import AutoencoderKL, DDIMScheduler
 from LatentSync.latentsync.models.unet import UNet3DConditionModel

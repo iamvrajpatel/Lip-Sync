@@ -13,8 +13,13 @@
 # limitations under the License.
 
 import argparse
+import huggingface_hub
 from omegaconf import OmegaConf
 import torch
+
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+
 from diffusers import AutoencoderKL, DDIMScheduler
 from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline

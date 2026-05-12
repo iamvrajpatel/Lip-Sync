@@ -40,6 +40,13 @@ def _default_inference_runner(
     perform_inference(video_path, audio_path, seed, num_steps, guidance_scale, output_path)
 
 
+def _verify_default_inference_runtime() -> None:
+    from inference import perform_inference
+
+    if not callable(perform_inference):
+        raise RuntimeError("Lip-sync inference runtime is unavailable.")
+
+
 class LipSyncService:
     def __init__(
         self,
@@ -965,6 +972,9 @@ class LipSyncService:
         output_fps: int,
         job_dir: Path,
     ) -> Path:
+        if self._inference_runner is _default_inference_runner:
+            _verify_default_inference_runtime()
+
         self.detect_video_size(video_path)
 
         processing_video = self.convert_video_fps(video_path, self._processing_fps, job_dir / "processing_video.mp4")
@@ -1005,6 +1015,9 @@ class LipSyncService:
         output_fps: int,
         job_dir: Path,
     ) -> Path:
+        if self._inference_runner is _default_inference_runner:
+            _verify_default_inference_runtime()
+
         reference_video = self.generate_liveportrait_reference_video(image_path, job_dir)
         return self.generate_video_to_file(
             reference_video,
