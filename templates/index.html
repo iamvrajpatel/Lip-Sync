@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lip-Sync + TTS Studio</title>
+  <style>
+    :root {
+      --bg: #f5eddc;
+      --panel: rgba(255, 251, 245, 0.9);
+      --panel-strong: #fffaf2;
+      --text: #231c16;
+      --muted: #6d6154;
+      --accent: #b3532d;
+      --accent-strong: #7f3619;
+      --accent-soft: rgba(179, 83, 45, 0.1);
+      --teal: #0f6d65;
+      --teal-soft: rgba(15, 109, 101, 0.1);
+      --border: rgba(35, 28, 22, 0.12);
+      --success: #1f7a4d;
+      --error: #b23a2d;
+      --warning: #9b631d;
+      --shadow: 0 24px 60px rgba(80, 58, 35, 0.14);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(179, 83, 45, 0.18), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(15, 109, 101, 0.14), transparent 35%),
+        linear-gradient(135deg, #fbf4e8 0%, #efe0c5 48%, #e8d8bc 100%);
+      padding: 28px 18px 48px;
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15, 109, 101, 0.1);
+      color: var(--teal);
+      font-size: 0.86rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 16px 0 10px;
+      font-size: clamp(2.2rem, 4vw, 3.4rem);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .workspace-tabs,
+    .mini-tabs,
+    .voice-tabs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .workspace-tabs {
+      margin: 22px 0 18px;
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .workspace-tab,
+    .mini-tab,
+    .voice-tab,
+    .submit-button,
+    .download-link,
+    .download-audio-link {
+      border: 0;
+      border-radius: 999px;
+      font-weight: 700;
+      transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .workspace-tab,
+    .mini-tab {
+      padding: 12px 18px;
+      background: rgba(179, 83, 45, 0.09);
+      color: var(--accent-strong);
+    }
+
+    .voice-tabs {
+      padding: 6px;
+      background: var(--teal-soft);
+      border: 1px solid rgba(15, 109, 101, 0.12);
+      border-radius: 18px;
+    }
+
+    .voice-tab {
+      padding: 12px 14px;
+      background: transparent;
+      color: var(--teal);
+      box-shadow: none;
+    }
+
+    .workspace-tab.active,
+    .mini-tab.active {
+      background: linear-gradient(135deg, var(--accent) 0%, #d47a46 100%);
+      color: #fff8f2;
+      box-shadow: 0 14px 30px rgba(179, 83, 45, 0.2);
+    }
+
+    .voice-tab.active {
+      background: #ffffff;
+      box-shadow: 0 12px 28px rgba(15, 109, 101, 0.12);
+    }
+
+    .workspace-tab:hover,
+    .mini-tab:hover,
+    .voice-tab:hover,
+    .submit-button:hover,
+    .download-link:hover,
+    .download-audio-link:hover {
+      transform: translateY(-1px);
+    }
+
+    .workspace-panel {
+      display: none;
+    }
+
+    .workspace-panel.active {
+      display: block;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .panel-inner {
+      padding: 24px;
+    }
+
+    .layout {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+    }
+
+    .tts-layout {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+    }
+
+    .label,
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.94rem;
+      font-weight: 700;
+    }
+
+    .caps-label {
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid rgba(35, 28, 22, 0.16);
+      border-radius: 16px;
+      background: var(--panel-strong);
+      color: var(--text);
+      padding: 14px 16px;
+      font: inherit;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: rgba(179, 83, 45, 0.45);
+    }
+
+    textarea {
+      min-height: 170px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .form-grid,
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field.full,
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    .help,
+    .hint,
+    .placeholder-card,
+    .status,
+    .error {
+      border-radius: 16px;
+      padding: 14px 16px;
+      line-height: 1.5;
+    }
+
+    .help,
+    .hint,
+    .placeholder-card {
+      background: #fff6e7;
+      border: 1px solid rgba(181, 111, 59, 0.14);
+      color: #7a4c24;
+    }
+
+    .status {
+      min-height: 24px;
+      margin-top: 14px;
+      font-weight: 700;
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .status.error,
+    .error {
+      color: var(--error);
+    }
+
+    .error {
+      display: none;
+      background: rgba(178, 58, 45, 0.08);
+      border: 1px solid rgba(178, 58, 45, 0.16);
+    }
+
+    .timing {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .submit-row {
+      margin-top: 20px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .submit-button {
+      min-height: 48px;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, var(--accent) 0%, #d47a46 100%);
+      color: #fffdf8;
+      box-shadow: 0 14px 28px rgba(179, 83, 45, 0.18);
+    }
+
+    .submit-button:disabled {
+      opacity: 0.68;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .download-link,
+    .download-audio-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 12px 20px;
+      text-decoration: none;
+    }
+
+    .download-link {
+      background: rgba(31, 122, 77, 0.12);
+      color: var(--success);
+    }
+
+    .download-audio-link {
+      background: rgba(15, 109, 101, 0.12);
+      color: var(--teal);
+    }
+
+    .result-card h2,
+    .section-title {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .result-top,
+    .meta-row,
+    .system-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .result-meta,
+    .muted {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .video-shell,
+    .player,
+    .system-card {
+      border-radius: 18px;
+      border: 1px solid rgba(35, 28, 22, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .video-shell {
+      overflow: hidden;
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(82, 58, 36, 0.08), rgba(179, 83, 45, 0.1));
+    }
+
+    .player,
+    .system-card {
+      padding: 18px;
+    }
+
+    .placeholder {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    video,
+    audio {
+      width: 100%;
+    }
+
+    video {
+      display: none;
+      max-height: 520px;
+      background: #16120f;
+    }
+
+    .download-row {
+      margin-top: 18px;
+      display: none;
+    }
+
+    .voice-panel {
+      display: none;
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(29, 26, 23, 0.08);
+    }
+
+    .voice-panel.active,
+    .mini-panel.active {
+      display: block;
+    }
+
+    .mini-panel {
+      display: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+
+    .badge::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge-ready {
+      color: var(--teal);
+      background: rgba(15, 109, 101, 0.1);
+      border-color: rgba(15, 109, 101, 0.16);
+    }
+
+    .badge-loading {
+      color: var(--warning);
+      background: rgba(181, 111, 59, 0.1);
+      border-color: rgba(181, 111, 59, 0.16);
+    }
+
+    .badge-error {
+      color: var(--error);
+      background: rgba(178, 58, 45, 0.08);
+      border-color: rgba(178, 58, 45, 0.14);
+    }
+
+    .speaker-list {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(15, 109, 101, 0.08);
+      color: var(--teal);
+      font-size: 0.85rem;
+    }
+
+    .generation-meta {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .generation-chip {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(29, 26, 23, 0.08);
+    }
+
+    .generation-chip strong {
+      display: block;
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .loader-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      background: rgba(255, 250, 242, 0.9);
+      backdrop-filter: blur(4px);
+      z-index: 2;
+      border-radius: 18px;
+    }
+
+    .loader-overlay.active {
+      display: flex;
+    }
+
+    .wave-loader {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 42px;
+    }
+
+    .wave-loader span {
+      width: 8px;
+      height: 12px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #14786d 0%, #0d6c63 100%);
+      animation: wave 0.95s ease-in-out infinite;
+      transform-origin: bottom center;
+    }
+
+    .wave-loader span:nth-child(2) { animation-delay: 0.08s; }
+    .wave-loader span:nth-child(3) { animation-delay: 0.16s; }
+    .wave-loader span:nth-child(4) { animation-delay: 0.24s; }
+    .wave-loader span:nth-child(5) { animation-delay: 0.32s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.55); opacity: 0.55; }
+      50% { transform: scaleY(1.8); opacity: 1; }
+    }
+
+    @media (max-width: 940px) {
+      .layout,
+      .tts-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .form-grid,
+      .grid,
+      .generation-meta {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <span class="eyebrow">Unified Studio</span>
+      <h1>Run lip-sync generation and multilingual speech creation from one application.</h1>
+      <p class="lede">
+        The backend is now shared, while each workflow stays focused. Use the Lip-sync workspace for video jobs and the TTS / Voice Clone workspace for speaker-based speech, described voices, or reference-audio cloning.
+      </p>
+    </section>
+
+    <div class="workspace-tabs" role="tablist" aria-label="Studio workspaces">
+      <button id="workspaceTabLipsync" class="workspace-tab active" type="button" data-workspace="lipsync">Lip-sync</button>
+      <button id="workspaceTabTts" class="workspace-tab" type="button" data-workspace="tts">TTS / Voice Clone</button>
+    </div>
+
+    <section id="workspaceLipsync" class="workspace-panel active">
+      <div class="panel panel-inner" style="margin-bottom: 18px;">
+        <label class="caps-label" for="lip-base-url">Base URL</label>
+        <input id="lip-base-url" name="base_url" type="text" placeholder="Leave blank to use this server, or enter a remote API base URL">
+        <p class="help" style="margin-top: 10px;">Leave this blank when the UI is already running on your inference server. Using the same remote URL here only adds an extra proxy hop.</p>
+      </div>
+
+      <div class="layout">
+        <section class="panel">
+          <div class="panel-inner">
+            <div class="mini-tabs" role="tablist" aria-label="Lip-sync modes" style="margin-bottom: 18px;">
+              <button class="mini-tab active" type="button" data-lip-tab="video">Generate From Video</button>
+              <button class="mini-tab" type="button" data-lip-tab="image">Generate From Image</button>
+            </div>
+
+            <div class="mini-panel active" data-lip-panel="video">
+              <form id="lip-video-form" data-endpoint="/jobs/generate-from-video" data-filename="output_video.mp4">
+                <div class="form-grid">
+                  <div class="field full">
+                    <label class="caps-label" for="lip-video-file">Video</label>
+                    <input id="lip-video-file" name="video" type="file" accept="video/*" required>
+                  </div>
+                  <div class="field full">
+                    <label class="caps-label" for="lip-video-audio-file">Audio</label>
+                    <input id="lip-video-audio-file" name="audio" type="file" accept="audio/*" required>
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-video-seed">Seed</label>
+                    <input id="lip-video-seed" name="seed" type="number" value="1247" step="1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-video-num-steps">Num Steps</label>
+                    <input id="lip-video-num-steps" name="num_steps" type="number" value="40" min="1" max="100" step="1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-video-guidance-scale">Guidance Scale</label>
+                    <input id="lip-video-guidance-scale" name="guidance_scale" type="number" value="1.0" min="0.1" max="10" step="0.1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-video-video-scale">Video Scale</label>
+                    <input id="lip-video-video-scale" name="video_scale" type="number" value="0.8" min="0.1" max="1.0" step="0.1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-video-output-fps">Output FPS</label>
+                    <input id="lip-video-output-fps" name="output_fps" type="number" value="30" min="6" max="60" step="1">
+                  </div>
+                </div>
+                <div class="submit-row">
+                  <button class="submit-button" type="submit">Generate Video</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="mini-panel" data-lip-panel="image">
+              <form id="lip-image-form" data-endpoint="/jobs/generate-from-image" data-filename="lipsync_output.mp4">
+                <div class="form-grid">
+                  <div class="field full">
+                    <label class="caps-label" for="lip-image-file">Image</label>
+                    <input id="lip-image-file" name="image" type="file" accept="image/*" required>
+                  </div>
+                  <div class="field full">
+                    <label class="caps-label" for="lip-image-audio-file">Audio</label>
+                    <input id="lip-image-audio-file" name="audio" type="file" accept="audio/*" required>
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-image-seed">Seed</label>
+                    <input id="lip-image-seed" name="seed" type="number" value="1247" step="1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-image-num-steps">Num Steps</label>
+                    <input id="lip-image-num-steps" name="num_steps" type="number" value="40" min="1" max="100" step="1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-image-guidance-scale">Guidance Scale</label>
+                    <input id="lip-image-guidance-scale" name="guidance_scale" type="number" value="1.0" min="0.1" max="10" step="0.1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-image-video-scale">Video Scale</label>
+                    <input id="lip-image-video-scale" name="video_scale" type="number" value="0.8" min="0.1" max="1.0" step="0.1">
+                  </div>
+                  <div class="field">
+                    <label class="caps-label" for="lip-image-output-fps">Output FPS</label>
+                    <input id="lip-image-output-fps" name="output_fps" type="number" value="30" min="6" max="60" step="1">
+                  </div>
+                </div>
+                <div class="submit-row">
+                  <button class="submit-button" type="submit">Generate Video</button>
+                </div>
+              </form>
+            </div>
+
+            <div id="lip-status" class="status"></div>
+            <div id="lip-timing" class="timing"></div>
+          </div>
+        </section>
+
+        <aside class="panel result-card">
+          <div class="panel-inner">
+            <div class="result-top">
+              <h2>Generated Video</h2>
+              <span id="lip-result-meta" class="result-meta">Waiting for a job</span>
+            </div>
+            <div class="video-shell">
+              <div id="lip-placeholder" class="placeholder">
+                The generated MP4 will appear here after the background job completes.
+              </div>
+              <video id="lip-result-video" controls playsinline></video>
+            </div>
+            <div id="lip-download-row" class="download-row">
+              <a id="lip-download-link" class="download-link" href="#" download>Download Video</a>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="workspaceTts" class="workspace-panel">
+      <div class="tts-layout">
+        <section class="panel">
+          <div class="panel-inner">
+            <div class="meta-row" style="margin-bottom: 18px;">
+              <h2 class="section-title">TTS / Voice Clone</h2>
+              <span class="muted">{{ languages|length }} supported languages</span>
+            </div>
+
+            <div class="system-card" style="margin-bottom: 18px;">
+              <div class="system-row">
+                <div>
+                  <strong>Backend sync</strong>
+                  <div id="tts-backendStatusBadge" class="badge badge-loading" style="margin-top: 10px;">Checking backend...</div>
+                </div>
+                <div>
+                  <strong>Last sync</strong>
+                  <div id="tts-lastSyncTime" style="margin-top: 10px; color: var(--muted);">Not synced yet</div>
+                </div>
+              </div>
+              <div id="tts-backendStatusText" style="margin-top: 14px; color: var(--muted);">Waiting for backend status...</div>
+            </div>
+
+            <form id="tts-form">
+              <div class="full" style="margin-bottom: 16px;">
+                <label for="tts-text">Text</label>
+                <textarea id="tts-text" name="text" placeholder="Type or paste text in the selected language." required></textarea>
+              </div>
+
+              <div style="margin-bottom: 16px;">
+                <label>Voice source</label>
+                <div class="voice-tabs" role="tablist" aria-label="Voice source">
+                  <button id="tts-speakerTab" class="voice-tab active" type="button" data-mode="speaker">Select existing speaker</button>
+                  <button id="tts-descriptionTab" class="voice-tab" type="button" data-mode="description">Write your own description</button>
+                  <button id="tts-cloneTab" class="voice-tab" type="button" data-mode="clone">Clone from reference audio</button>
+                </div>
+              </div>
+
+              <div class="grid" style="margin-bottom: 16px;">
+                <div>
+                  <label for="tts-language">Language</label>
+                  <select id="tts-language" name="language" required></select>
+                </div>
+              </div>
+
+              <div id="tts-speakerPanel" class="voice-panel active" style="margin-bottom: 16px;">
+                <label for="tts-speaker">Speaker</label>
+                <select id="tts-speaker" name="speaker"></select>
+                <div id="tts-speakerHint" class="hint" style="margin-top: 14px;"></div>
+              </div>
+
+              <div id="tts-descriptionPanel" class="voice-panel" style="margin-bottom: 16px;">
+                <label for="tts-voiceDescription">Voice description (In English)</label>
+                <textarea id="tts-voiceDescription" name="voice_description" placeholder="{{ custom_description_placeholder }}"></textarea>
+                <div class="hint" style="margin-top: 14px;">Describe tone, pace, clarity, recording quality, or emotion. The demo placeholder below is a good starting point.</div>
+              </div>
+
+              <div id="tts-clonePanel" class="voice-panel" style="margin-bottom: 16px;">
+                <label for="tts-referenceAudio">Reference audio</label>
+                <input id="tts-referenceAudio" name="reference_audio" type="file" accept=".wav,.mp3,.m4a,.flac,.ogg,audio/*">
+                <div id="tts-cloneHint" class="hint" style="margin-top: 14px;">Clone from reference audio by uploading a clean voice sample for the best results.</div>
+              </div>
+
+              <div id="tts-statusBox" class="status" style="display:none;">Generating speech. Please wait...</div>
+              <div id="tts-errorBox" class="error"></div>
+
+              <div class="submit-row">
+                <button id="tts-submitButton" class="submit-button" type="submit">Generate speech</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="panel-inner">
+            <div class="player" style="margin-bottom: 18px;">
+              <strong>Recommended speakers</strong>
+              <div id="tts-recommendedSpeakers" class="speaker-list"></div>
+            </div>
+
+            <div class="placeholder-card" style="margin-bottom: 18px;">
+              <strong>Demo description</strong>
+              {{ custom_description_placeholder }}
+            </div>
+
+            <div class="player" style="position: relative;">
+              <div id="tts-loaderOverlay" class="loader-overlay">
+                <div class="wave-loader" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div style="font-weight:700; color:var(--teal);">Generating audio</div>
+                <div class="muted">Backend and frontend stay synced while the request is running.</div>
+              </div>
+
+              <strong>Preview</strong>
+              <audio id="tts-audioPlayer" controls></audio>
+              <div class="submit-row">
+                <a id="tts-downloadLink" class="download-audio-link" href="#" download style="display:none;">Download Audio</a>
+              </div>
+
+              <div class="generation-meta">
+                <div class="generation-chip">
+                  <strong>Generation time</strong>
+                  <span id="tts-generationTimeValue">Not generated yet</span>
+                </div>
+                <div class="generation-chip">
+                  <strong>Voice mode</strong>
+                  <span id="tts-voiceModeValue">Preset speaker</span>
+                </div>
+                <div class="generation-chip">
+                  <strong>Backend state</strong>
+                  <span id="tts-backendStateValue">Checking...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const workspaceTabs = document.querySelectorAll(".workspace-tab");
+      const workspacePanels = document.querySelectorAll(".workspace-panel");
+
+      function setWorkspace(name) {
+        workspaceTabs.forEach((button) => {
+          button.classList.toggle("active", button.dataset.workspace === name);
+        });
+        workspacePanels.forEach((panel) => {
+          panel.classList.toggle("active", panel.id === `workspace${name === "lipsync" ? "Lipsync" : "Tts"}`);
+        });
+      }
+
+      workspaceTabs.forEach((button) => {
+        button.addEventListener("click", () => setWorkspace(button.dataset.workspace));
+      });
+    })();
+  </script>
+
+  <script>
+    (() => {
+      const tabButtons = document.querySelectorAll("[data-lip-tab]");
+      const tabPanels = document.querySelectorAll("[data-lip-panel]");
+      const forms = document.querySelectorAll("form[data-endpoint]");
+      const baseUrlInput = document.getElementById("lip-base-url");
+      const statusEl = document.getElementById("lip-status");
+      const timingEl = document.getElementById("lip-timing");
+      const resultMetaEl = document.getElementById("lip-result-meta");
+      const placeholderEl = document.getElementById("lip-placeholder");
+      const resultVideoEl = document.getElementById("lip-result-video");
+      const downloadRowEl = document.getElementById("lip-download-row");
+      const downloadLinkEl = document.getElementById("lip-download-link");
+
+      let currentVideoUrl = null;
+      let activeSubmissionToken = 0;
+
+      function setActiveTab(tabName) {
+        tabButtons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.lipTab === tabName);
+        });
+        tabPanels.forEach((panel) => {
+          panel.classList.toggle("active", panel.dataset.lipPanel === tabName);
+        });
+      }
+
+      function resetResult() {
+        if (currentVideoUrl) {
+          URL.revokeObjectURL(currentVideoUrl);
+          currentVideoUrl = null;
+        }
+        resultVideoEl.pause();
+        resultVideoEl.removeAttribute("src");
+        resultVideoEl.style.display = "none";
+        placeholderEl.style.display = "block";
+        downloadRowEl.style.display = "none";
+        downloadLinkEl.removeAttribute("href");
+        resultMetaEl.textContent = "Waiting for a job";
+      }
+
+      function setStatus(message, kind) {
+        statusEl.textContent = message || "";
+        statusEl.className = `status${kind ? ` ${kind}` : ""}`;
+      }
+
+      function extractFilename(response, fallbackName) {
+        const disposition = response.headers.get("content-disposition") || "";
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        return match ? match[1] : fallbackName;
+      }
+
+      async function readErrorMessage(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const payload = await response.json();
+          return payload.detail || JSON.stringify(payload);
+        }
+        const text = await response.text();
+        return text.trim() || `Request failed with status ${response.status}`;
+      }
+
+      async function loadCompletedJob(job, fallbackFilename) {
+        if (!job.download_url) {
+          throw new Error("Job completed without a download URL.");
+        }
+
+        const response = await fetch(job.download_url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const blob = await response.blob();
+        currentVideoUrl = URL.createObjectURL(blob);
+        const filename = job.result_filename || extractFilename(response, fallbackFilename);
+
+        resultVideoEl.src = currentVideoUrl;
+        resultVideoEl.style.display = "block";
+        placeholderEl.style.display = "none";
+        downloadLinkEl.href = currentVideoUrl;
+        downloadLinkEl.download = filename;
+        downloadRowEl.style.display = "flex";
+        resultMetaEl.textContent = filename;
+      }
+
+      async function pollJob(statusUrl, fallbackFilename, startedAt, submissionToken) {
+        while (submissionToken === activeSubmissionToken) {
+          const response = await fetch(statusUrl, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          const job = await response.json();
+          if (submissionToken !== activeSubmissionToken) {
+            return;
+          }
+
+          const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
+
+          if (job.status === "completed") {
+            await loadCompletedJob(job, fallbackFilename);
+            setStatus("Generation completed successfully.", "success");
+            timingEl.textContent = job.duration_seconds != null
+              ? `Server processing time: ${job.duration_seconds}s`
+              : `Browser round trip: ${elapsedClientSeconds}s`;
+            return;
+          }
+
+          if (job.status === "failed") {
+            throw new Error(job.error || "Generation failed");
+          }
+
+          const statusLabel = job.status === "queued" ? "queued" : "processing";
+          setStatus(`Job ${statusLabel}. The server is still working on your video.`, "");
+          timingEl.textContent = `Elapsed: ${elapsedClientSeconds}s`;
+          resultMetaEl.textContent = job.job_id;
+
+          const delayMs = Number(job.poll_after_ms) > 0 ? Number(job.poll_after_ms) : 3000;
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+        }
+      }
+
+      async function submitForm(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const submitButton = form.querySelector(".submit-button");
+        const baseUrl = baseUrlInput.value.trim();
+        const endpoint = form.dataset.endpoint;
+        const fallbackFilename = form.dataset.filename || "output.mp4";
+        const formData = new FormData(form);
+
+        if (baseUrl) {
+          formData.set("base_url", baseUrl);
+        } else {
+          formData.delete("base_url");
+        }
+
+        resetResult();
+        activeSubmissionToken += 1;
+        const submissionToken = activeSubmissionToken;
+        setStatus("Submitting job. The page will keep polling until the video is ready.", "");
+        timingEl.textContent = "";
+        resultMetaEl.textContent = endpoint.replace("/", "");
+        submitButton.disabled = true;
+
+        const startedAt = performance.now();
+
+        try {
+          const response = await fetch(endpoint, { method: "POST", body: formData });
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          const job = await response.json();
+          resultMetaEl.textContent = job.job_id || "Job submitted";
+          setStatus("Job accepted. Polling for completion.", "");
+          await pollJob(job.status_url || `/jobs/${job.job_id}`, fallbackFilename, startedAt, submissionToken);
+        } catch (error) {
+          const elapsedClientSeconds = ((performance.now() - startedAt) / 1000).toFixed(2);
+          setStatus(error.message || "Unexpected request error", "error");
+          timingEl.textContent = `Browser round trip: ${elapsedClientSeconds}s`;
+          resultMetaEl.textContent = "Request interrupted";
+        } finally {
+          submitButton.disabled = false;
+        }
+      }
+
+      tabButtons.forEach((button) => {
+        button.addEventListener("click", () => setActiveTab(button.dataset.lipTab));
+      });
+
+      forms.forEach((form) => {
+        form.addEventListener("submit", submitForm);
+      });
+    })();
+  </script>
+
+  <script>
+    (() => {
+      const languages = {{ languages | tojson }};
+      const cloneSupportedLanguageCodes = new Set({{ clone_supported_languages | tojson }});
+      const languageSelect = document.getElementById("tts-language");
+      const speakerSelect = document.getElementById("tts-speaker");
+      const speakerHint = document.getElementById("tts-speakerHint");
+      const cloneHint = document.getElementById("tts-cloneHint");
+      const recommendedSpeakers = document.getElementById("tts-recommendedSpeakers");
+      const statusBox = document.getElementById("tts-statusBox");
+      const errorBox = document.getElementById("tts-errorBox");
+      const audioPlayer = document.getElementById("tts-audioPlayer");
+      const submitButton = document.getElementById("tts-submitButton");
+      const form = document.getElementById("tts-form");
+      const voiceDescription = document.getElementById("tts-voiceDescription");
+      const referenceAudioInput = document.getElementById("tts-referenceAudio");
+      const speakerTab = document.getElementById("tts-speakerTab");
+      const descriptionTab = document.getElementById("tts-descriptionTab");
+      const cloneTab = document.getElementById("tts-cloneTab");
+      const speakerPanel = document.getElementById("tts-speakerPanel");
+      const descriptionPanel = document.getElementById("tts-descriptionPanel");
+      const clonePanel = document.getElementById("tts-clonePanel");
+      const backendStatusBadge = document.getElementById("tts-backendStatusBadge");
+      const backendStatusText = document.getElementById("tts-backendStatusText");
+      const lastSyncTime = document.getElementById("tts-lastSyncTime");
+      const generationTimeValue = document.getElementById("tts-generationTimeValue");
+      const voiceModeValue = document.getElementById("tts-voiceModeValue");
+      const backendStateValue = document.getElementById("tts-backendStateValue");
+      const loaderOverlay = document.getElementById("tts-loaderOverlay");
+      const downloadLink = document.getElementById("tts-downloadLink");
+
+      let audioUrl = null;
+      let activeVoiceMode = "speaker";
+      let healthPollTimer = null;
+      let currentRequestController = null;
+
+      function getSelectedLanguage() {
+        return languages.find((language) => language.code === languageSelect.value) || languages[0];
+      }
+
+      function resetAudio() {
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          audioUrl = null;
+        }
+        audioPlayer.removeAttribute("src");
+        audioPlayer.load();
+        downloadLink.style.display = "none";
+        downloadLink.removeAttribute("href");
+      }
+
+      function renderLanguages() {
+        const selectedLanguageCode = languageSelect.value || languages[0]?.code;
+        const availableLanguages = activeVoiceMode === "clone"
+          ? languages.filter((language) => cloneSupportedLanguageCodes.has(language.code))
+          : languages;
+        languageSelect.innerHTML = "";
+        availableLanguages.forEach((language) => {
+          const option = document.createElement("option");
+          option.value = language.code;
+          option.textContent = language.display_name;
+          languageSelect.appendChild(option);
+        });
+
+        if (selectedLanguageCode && availableLanguages.some((language) => language.code === selectedLanguageCode)) {
+          languageSelect.value = selectedLanguageCode;
+        } else if (availableLanguages[0]) {
+          languageSelect.value = availableLanguages[0].code;
+        }
+      }
+
+      function renderCloneHint() {
+        const selectedLanguage = getSelectedLanguage();
+        if (!selectedLanguage) {
+          cloneHint.textContent = "Reference-audio cloning is currently unavailable.";
+          return;
+        }
+
+        const supportedLanguageNames = languages
+          .filter((language) => cloneSupportedLanguageCodes.has(language.code))
+          .map((language) => language.display_name);
+        cloneHint.textContent = `Clone from reference audio is available for ${selectedLanguage.display_name}. Supported clone languages: ${supportedLanguageNames.join(", ")}.`;
+      }
+
+      function renderSpeakers() {
+        const selectedLanguage = getSelectedLanguage();
+        speakerSelect.innerHTML = "";
+        selectedLanguage.speakers.forEach((speaker) => {
+          const option = document.createElement("option");
+          option.value = speaker.name;
+          option.textContent = speaker.recommended ? `${speaker.name} • recommended` : speaker.name;
+          speakerSelect.appendChild(option);
+        });
+
+        const recommended = selectedLanguage.recommended_speakers.join(", ");
+        speakerHint.textContent = recommended
+          ? `Recommended for ${selectedLanguage.display_name}: ${recommended}`
+          : `All listed speakers are available for ${selectedLanguage.display_name}.`;
+
+        recommendedSpeakers.innerHTML = "";
+        selectedLanguage.recommended_speakers.forEach((speakerName) => {
+          const pill = document.createElement("span");
+          pill.className = "pill";
+          pill.textContent = `${selectedLanguage.display_name}: ${speakerName}`;
+          recommendedSpeakers.appendChild(pill);
+        });
+
+        renderCloneHint();
+      }
+
+      function setVoiceMode(mode) {
+        activeVoiceMode = mode;
+        const speakerMode = mode === "speaker";
+        const descriptionMode = mode === "description";
+        const cloneMode = mode === "clone";
+
+        renderLanguages();
+        speakerTab.classList.toggle("active", speakerMode);
+        descriptionTab.classList.toggle("active", descriptionMode);
+        cloneTab.classList.toggle("active", cloneMode);
+        speakerPanel.classList.toggle("active", speakerMode);
+        descriptionPanel.classList.toggle("active", descriptionMode);
+        clonePanel.classList.toggle("active", cloneMode);
+        speakerSelect.required = speakerMode;
+        voiceDescription.required = descriptionMode;
+        referenceAudioInput.required = cloneMode;
+        voiceModeValue.textContent = speakerMode ? "Preset speaker" : descriptionMode ? "Custom description" : "Voice clone";
+        renderSpeakers();
+        renderCloneHint();
+      }
+
+      function showStatus(message) {
+        statusBox.textContent = message;
+        statusBox.style.display = "block";
+      }
+
+      function hideStatus() {
+        statusBox.style.display = "none";
+      }
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.style.display = "block";
+      }
+
+      function hideError() {
+        errorBox.style.display = "none";
+        errorBox.textContent = "";
+      }
+
+      function setLoaderState(isLoading) {
+        loaderOverlay.classList.toggle("active", isLoading);
+      }
+
+      function formatDurationFromMs(milliseconds) {
+        const totalSeconds = Math.max(0, Math.round(Number(milliseconds) / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+      }
+
+      function updateBackendStatus(data, syncedAt = new Date()) {
+        backendStatusBadge.className = "badge";
+
+        if (data.status === "ok") {
+          backendStatusBadge.classList.add("badge-ready");
+          backendStatusBadge.textContent = data.generation_in_progress ? "Backend ready • generating" : "Backend ready";
+          backendStatusText.textContent = data.generation_in_progress
+            ? `Model loaded on ${data.device || "unknown device"} and currently generating audio.`
+            : `Model loaded on ${data.device || "unknown device"} and ready for new requests.`;
+          backendStateValue.textContent = data.generation_in_progress ? "Generating" : "Ready";
+        } else if (data.status === "error") {
+          backendStatusBadge.classList.add("badge-error");
+          backendStatusBadge.textContent = "Backend error";
+          backendStatusText.textContent = data.model_error || "Backend reported a loading error.";
+          backendStateValue.textContent = "Error";
+        } else {
+          backendStatusBadge.classList.add("badge-loading");
+          backendStatusBadge.textContent = "Backend loading";
+          backendStatusText.textContent = "Model is still loading. The page will keep syncing automatically.";
+          backendStateValue.textContent = "Loading";
+        }
+
+        lastSyncTime.textContent = syncedAt.toLocaleTimeString();
+        submitButton.disabled = data.status !== "ok" || data.generation_in_progress;
+      }
+
+      async function syncBackendHealth() {
+        if (!navigator.onLine) {
+          backendStatusBadge.className = "badge badge-error";
+          backendStatusBadge.textContent = "Frontend offline";
+          backendStatusText.textContent = "Internet connection is unavailable. Requests are paused until the connection returns.";
+          backendStateValue.textContent = "Offline";
+          lastSyncTime.textContent = "Offline";
+          submitButton.disabled = true;
+          return;
+        }
+
+        try {
+          const response = await fetch("/health", { cache: "no-store" });
+          const data = await response.json();
+          updateBackendStatus(data, new Date());
+        } catch (error) {
+          backendStatusBadge.className = "badge badge-error";
+          backendStatusBadge.textContent = "Backend unreachable";
+          backendStatusText.textContent = "Could not sync with the backend right now. The current request will stay stopped until the connection recovers.";
+          backendStateValue.textContent = "Offline";
+          lastSyncTime.textContent = "Sync failed";
+          submitButton.disabled = true;
+        }
+      }
+
+      function startHealthPolling() {
+        if (healthPollTimer) {
+          window.clearInterval(healthPollTimer);
+        }
+        healthPollTimer = window.setInterval(syncBackendHealth, 10000);
+      }
+
+      async function requestAudio(text, language, signal) {
+        if (activeVoiceMode === "clone") {
+          const file = referenceAudioInput.files[0];
+          if (!file) {
+            throw new Error("Upload a reference audio file to use clone mode.");
+          }
+
+          const payload = new FormData();
+          payload.append("text", text);
+          payload.append("language", language);
+          payload.append("reference_audio", file);
+
+          return fetch("/clone-voice", { method: "POST", body: payload, signal });
+        }
+
+        const payload = { text, language, voice_mode: activeVoiceMode };
+        if (activeVoiceMode === "speaker") {
+          payload.speaker = speakerSelect.value;
+        } else {
+          payload.voice_description = voiceDescription.value;
+        }
+
+        return fetch("/tts/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal,
+        });
+      }
+
+      speakerTab.addEventListener("click", () => setVoiceMode("speaker"));
+      descriptionTab.addEventListener("click", () => setVoiceMode("description"));
+      cloneTab.addEventListener("click", () => setVoiceMode("clone"));
+
+      languageSelect.addEventListener("change", () => {
+        renderSpeakers();
+        hideError();
+        resetAudio();
+      });
+
+      window.addEventListener("offline", () => {
+        if (currentRequestController) {
+          currentRequestController.abort();
+        }
+        syncBackendHealth();
+      });
+
+      window.addEventListener("online", () => {
+        hideError();
+        syncBackendHealth();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (currentRequestController) {
+          currentRequestController.abort();
+        }
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        hideError();
+        resetAudio();
+        submitButton.disabled = true;
+        setLoaderState(true);
+        showStatus("Generating speech. Please wait...");
+        generationTimeValue.textContent = "Generating...";
+        backendStateValue.textContent = "Generating";
+        currentRequestController = new AbortController();
+
+        try {
+          const response = await requestAudio(
+            document.getElementById("tts-text").value,
+            languageSelect.value,
+            currentRequestController.signal,
+          );
+
+          if (!response.ok) {
+            let message = "Speech generation failed.";
+            try {
+              const data = await response.json();
+              message = data.detail || message;
+            } catch (error) {
+              message = response.statusText || message;
+            }
+            throw new Error(message);
+          }
+
+          const generationTimeMs = response.headers.get("X-Generation-Time-Ms");
+          const disposition = response.headers.get("content-disposition") || "";
+          const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+          const filename = filenameMatch ? filenameMatch[1] : "speech.wav";
+
+          generationTimeValue.textContent = generationTimeMs ? formatDurationFromMs(generationTimeMs) : "Completed";
+          const blob = await response.blob();
+          audioUrl = URL.createObjectURL(blob);
+          audioPlayer.src = audioUrl;
+          downloadLink.href = audioUrl;
+          downloadLink.download = filename;
+          downloadLink.style.display = "inline-flex";
+          await audioPlayer.play().catch(() => undefined);
+        } catch (error) {
+          if (error.name === "AbortError") {
+            showError("Connection closed. Backend generation was asked to stop.");
+            generationTimeValue.textContent = "Cancelled";
+          } else {
+            showError(error.message || "Speech generation failed.");
+            generationTimeValue.textContent = "Failed";
+          }
+        } finally {
+          currentRequestController = null;
+          setLoaderState(false);
+          hideStatus();
+          await syncBackendHealth();
+        }
+      });
+
+      renderLanguages();
+      renderSpeakers();
+      setVoiceMode("speaker");
+      syncBackendHealth();
+      startHealthPolling();
+    })();
+  </script>
+</body>
+</html>

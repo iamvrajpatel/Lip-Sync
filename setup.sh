@@ -1,6 +1,9 @@
 #install torch
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
+# shared app dependencies for TTS and voice cloning
+pip install parler-tts TTS soundfile
+
 
 # location :=> LivePortrait/
 

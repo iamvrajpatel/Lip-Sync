@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indic Parler TTS</title>
+  <style>
+    :root {
+      --bg: #f7efe4;
+      --panel: rgba(255, 252, 247, 0.9);
+      --panel-strong: #fffaf2;
+      --text: #1d1a17;
+      --muted: #65584d;
+      --accent: #0d6c63;
+      --accent-strong: #084c46;
+      --accent-soft: #d4efe9;
+      --border: rgba(29, 26, 23, 0.12);
+      --danger: #a33737;
+      --warning: #9b631d;
+      --shadow: 0 20px 50px rgba(82, 57, 29, 0.12);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(13, 108, 99, 0.15), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(181, 111, 59, 0.18), transparent 35%),
+        linear-gradient(135deg, #f8f3ea 0%, #f2e4ce 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+    }
+
+    .shell {
+      width: min(1120px, 100%);
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 24px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 34px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -50px -80px auto;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(13, 108, 99, 0.18), transparent 65%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 18px 0 10px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+    }
+
+    .lede {
+      margin: 0;
+      max-width: 62ch;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+
+    .meta {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .meta-card {
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: 16px;
+      border: 1px solid rgba(29, 26, 23, 0.08);
+      min-width: 150px;
+    }
+
+    .meta-card strong {
+      display: block;
+      font-size: 1.2rem;
+      margin-bottom: 4px;
+    }
+
+    .system-card {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.74);
+      border: 1px solid rgba(29, 26, 23, 0.08);
+    }
+
+    .system-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+
+    .badge::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge-ready {
+      color: var(--accent-strong);
+      background: rgba(13, 108, 99, 0.1);
+      border-color: rgba(13, 108, 99, 0.16);
+    }
+
+    .badge-loading {
+      color: var(--warning);
+      background: rgba(181, 111, 59, 0.1);
+      border-color: rgba(181, 111, 59, 0.16);
+    }
+
+    .badge-error {
+      color: var(--danger);
+      background: rgba(163, 55, 55, 0.08);
+      border-color: rgba(163, 55, 55, 0.14);
+    }
+
+    .form-panel {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    textarea,
+    select,
+    input[type="file"],
+    button {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      font: inherit;
+    }
+
+    textarea,
+    select,
+    input[type="file"] {
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--text);
+    }
+
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .description-input textarea {
+      min-height: 150px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .voice-tabs {
+      display: inline-grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 6px;
+      border-radius: 18px;
+      background: rgba(13, 108, 99, 0.08);
+      border: 1px solid rgba(13, 108, 99, 0.12);
+    }
+
+    .voice-tab {
+      appearance: none;
+      background: transparent;
+      color: var(--accent-strong);
+      border: none;
+      box-shadow: none;
+      padding: 12px 14px;
+      font-weight: 700;
+    }
+
+    .voice-tab.active {
+      background: #ffffff;
+      border: 1px solid rgba(13, 108, 99, 0.12);
+      box-shadow: 0 10px 18px rgba(13, 108, 99, 0.12);
+    }
+
+    .voice-panel {
+      display: none;
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(29, 26, 23, 0.08);
+    }
+
+    .voice-panel.active {
+      display: block;
+    }
+
+    .hint,
+    .status,
+    .error {
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .hint {
+      background: #fff6e7;
+      border: 1px solid rgba(181, 111, 59, 0.16);
+      color: #7a4c24;
+    }
+
+    .status {
+      display: none;
+      background: rgba(13, 108, 99, 0.08);
+      border: 1px solid rgba(13, 108, 99, 0.18);
+      color: var(--accent-strong);
+    }
+
+    .error {
+      display: none;
+      background: rgba(163, 55, 55, 0.08);
+      border: 1px solid rgba(163, 55, 55, 0.16);
+      color: var(--danger);
+    }
+
+    button {
+      cursor: pointer;
+      padding: 14px 18px;
+      background: linear-gradient(135deg, var(--accent) 0%, #14786d 100%);
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+      box-shadow: 0 14px 28px rgba(13, 108, 99, 0.2);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 36px rgba(13, 108, 99, 0.24);
+    }
+
+    button:disabled {
+      opacity: 0.68;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .player {
+      position: relative;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(29, 26, 23, 0.08);
+      background: var(--panel-strong);
+      overflow: hidden;
+    }
+
+    .player audio {
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    .generation-meta {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .generation-chip {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(29, 26, 23, 0.08);
+    }
+
+    .generation-chip strong {
+      display: block;
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .speaker-list {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(13, 108, 99, 0.08);
+      color: var(--accent-strong);
+      font-size: 0.85rem;
+    }
+
+    .placeholder-card {
+      margin-top: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(13, 108, 99, 0.12);
+      color: var(--accent-strong);
+      line-height: 1.55;
+    }
+
+    .placeholder-card strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .loader-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      background: rgba(255, 250, 242, 0.9);
+      backdrop-filter: blur(4px);
+      z-index: 2;
+    }
+
+    .loader-overlay.active {
+      display: flex;
+    }
+
+    .wave-loader {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 42px;
+    }
+
+    .wave-loader span {
+      width: 8px;
+      height: 12px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #14786d 0%, #0d6c63 100%);
+      animation: wave 0.95s ease-in-out infinite;
+      transform-origin: bottom center;
+    }
+
+    .wave-loader span:nth-child(2) { animation-delay: 0.08s; }
+    .wave-loader span:nth-child(3) { animation-delay: 0.16s; }
+    .wave-loader span:nth-child(4) { animation-delay: 0.24s; }
+    .wave-loader span:nth-child(5) { animation-delay: 0.32s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.55); opacity: 0.55; }
+      50% { transform: scaleY(1.8); opacity: 1; }
+    }
+
+    .loader-caption {
+      text-align: center;
+      color: var(--accent-strong);
+      font-weight: 700;
+    }
+
+    .loader-subcaption {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 880px) {
+      .shell { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 700px) {
+      .generation-meta,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 18px; }
+      .hero, .form-panel { padding: 22px; }
+      textarea { min-height: 160px; }
+      .voice-tabs { grid-template-columns: 1fr; }
+      .system-row { align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="panel hero">
+      <span class="eyebrow">AI4Bharat Indic Parler TTS</span>
+      <h1>Choose a built-in speaker, describe one, or clone a real voice.</h1>
+      <p class="lede">
+        Generate speech from the hosted FastAPI app using the AI4Bharat Indic
+        Parler TTS model for curated and described voices, or switch to XTTS
+        cloning when you want the output to follow a reference recording more closely.
+      </p>
+
+      <div class="meta">
+        <div class="meta-card">
+          <strong>{{ languages|length }}</strong>
+          Supported languages
+        </div>
+        <div class="meta-card">
+          <strong>3 voice modes</strong>
+          Speaker, description, or voice clone
+        </div>
+        <div class="meta-card">
+          <strong>/tts/ + /clone-voice</strong>
+          Synced with backend health and timing
+        </div>
+      </div>
+
+      <div class="system-card">
+        <div class="system-row">
+          <div>
+            <strong>Backend sync</strong>
+            <div id="backendStatusBadge" class="badge badge-loading" style="margin-top: 10px;">Checking backend...</div>
+          </div>
+          <div>
+            <strong>Last sync</strong>
+            <div id="lastSyncTime" style="margin-top: 10px; color: var(--muted);">Not synced yet</div>
+          </div>
+        </div>
+        <div id="backendStatusText" style="margin-top: 14px; color: var(--muted);">
+          Waiting for backend status...
+        </div>
+      </div>
+
+      <div class="player" style="margin-top: 22px;">
+        <strong>Recommended speakers</strong>
+        <div id="recommendedSpeakers" class="speaker-list"></div>
+      </div>
+
+      <div class="placeholder-card">
+        <strong>Demo description</strong>
+        {{ custom_description_placeholder }}
+      </div>
+
+      <div class="placeholder-card">
+        <strong>Clone mode</strong>
+        Upload a short reference clip to imitate a real voice across the full language catalog.
+      </div>
+    </section>
+
+    <section class="panel form-panel">
+      <form id="ttsForm">
+        <div>
+          <label for="text">Text (In Specific LanguageA warm, expressive female voice with a slightly brisk pace, clear pronunciation, and a clean studio recording with almost no background noise.)</label>
+          <textarea id="text" name="text" placeholder="Type or paste text in the selected language." required></textarea>
+        </div>
+
+        <div>
+          <label>Voice source</label>
+          <div class="voice-tabs" role="tablist" aria-label="Voice source">
+            <button id="speakerTab" class="voice-tab active" type="button" data-mode="speaker">Select existing speaker</button>
+            <button id="descriptionTab" class="voice-tab" type="button" data-mode="description">Write your own description</button>
+            <button id="cloneTab" class="voice-tab" type="button" data-mode="clone">Clone from reference audio</button>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <label for="language">Language</label>
+            <select id="language" name="language" required></select>
+          </div>
+        </div>
+
+        <div id="speakerPanel" class="voice-panel active">
+          <div>
+            <label for="speaker">Speaker</label>
+            <select id="speaker" name="speaker"></select>
+          </div>
+          <div id="speakerHint" class="hint" style="margin-top: 14px;"></div>
+        </div>
+
+        <div id="descriptionPanel" class="voice-panel description-input">
+          <label for="voiceDescription">Voice description (In English)</label>
+          <textarea
+            id="voiceDescription"
+            name="voice_description"
+            placeholder="{{ custom_description_placeholder }}"
+          ></textarea>
+          <div class="hint" style="margin-top: 14px;">
+            Describe tone, pace, clarity, recording quality, or emotion. The demo placeholder above is a good starting point.
+          </div>
+        </div>
+
+        <div id="clonePanel" class="voice-panel">
+          <label for="referenceAudio">Reference audio</label>
+          <input
+            id="referenceAudio"
+            name="reference_audio"
+            type="file"
+            accept=".wav,.mp3,.m4a,.flac,.ogg,audio/*"
+          >
+          <div id="cloneHint" class="hint" style="margin-top: 14px;">
+            Upload a clean voice sample for the best clone quality.
+          </div>
+        </div>
+
+        <div id="statusBox" class="status">Generating speech. Please wait...</div>
+        <div id="errorBox" class="error"></div>
+
+        <button id="submitButton" type="submit">Generate speech</button>
+      </form>
+
+      <div class="player">
+        <div id="loaderOverlay" class="loader-overlay">
+          <div class="wave-loader" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="loader-caption">Generating audio</div>
+          <div class="loader-subcaption">Backend and frontend stay synced while the request is running.</div>
+        </div>
+
+        <strong>Preview</strong>
+        <audio id="audioPlayer" controls></audio>
+
+        <div class="generation-meta">
+          <div class="generation-chip">
+            <strong>Generation time</strong>
+            <span id="generationTimeValue">Not generated yet</span>
+          </div>
+          <div class="generation-chip">
+            <strong>Voice mode</strong>
+            <span id="voiceModeValue">Preset speaker</span>
+          </div>
+          <div class="generation-chip">
+            <strong>Backend state</strong>
+            <span id="backendStateValue">Checking...</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const languages = {{ languages | tojson }};
+    const cloneSupportedLanguageCodes = new Set({{ clone_supported_languages | tojson }});
+    const languageSelect = document.getElementById("language");
+    const speakerSelect = document.getElementById("speaker");
+    const speakerHint = document.getElementById("speakerHint");
+    const cloneHint = document.getElementById("cloneHint");
+    const recommendedSpeakers = document.getElementById("recommendedSpeakers");
+    const statusBox = document.getElementById("statusBox");
+    const errorBox = document.getElementById("errorBox");
+    const audioPlayer = document.getElementById("audioPlayer");
+    const submitButton = document.getElementById("submitButton");
+    const form = document.getElementById("ttsForm");
+    const voiceDescription = document.getElementById("voiceDescription");
+    const referenceAudioInput = document.getElementById("referenceAudio");
+    const speakerTab = document.getElementById("speakerTab");
+    const descriptionTab = document.getElementById("descriptionTab");
+    const cloneTab = document.getElementById("cloneTab");
+    const speakerPanel = document.getElementById("speakerPanel");
+    const descriptionPanel = document.getElementById("descriptionPanel");
+    const clonePanel = document.getElementById("clonePanel");
+    const backendStatusBadge = document.getElementById("backendStatusBadge");
+    const backendStatusText = document.getElementById("backendStatusText");
+    const lastSyncTime = document.getElementById("lastSyncTime");
+    const generationTimeValue = document.getElementById("generationTimeValue");
+    const voiceModeValue = document.getElementById("voiceModeValue");
+    const backendStateValue = document.getElementById("backendStateValue");
+    const loaderOverlay = document.getElementById("loaderOverlay");
+
+    let audioUrl = null;
+    let activeVoiceMode = "speaker";
+    let healthPollTimer = null;
+    let currentRequestController = null;
+
+    function getSelectedLanguage() {
+      return (
+        languages.find((language) => language.code === languageSelect.value) ||
+        languages[0]
+      );
+    }
+
+    function resetAudio() {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        audioUrl = null;
+      }
+      audioPlayer.removeAttribute("src");
+      audioPlayer.load();
+    }
+
+    function renderLanguages() {
+      const selectedLanguageCode = languageSelect.value || languages[0]?.code;
+      const availableLanguages = activeVoiceMode === "clone"
+        ? languages.filter((language) => cloneSupportedLanguageCodes.has(language.code))
+        : languages;
+      languageSelect.innerHTML = "";
+      availableLanguages.forEach((language) => {
+        const option = document.createElement("option");
+        option.value = language.code;
+        option.textContent = language.display_name;
+        languageSelect.appendChild(option);
+      });
+
+      if (selectedLanguageCode && availableLanguages.some((language) => language.code === selectedLanguageCode)) {
+        languageSelect.value = selectedLanguageCode;
+      } else if (availableLanguages[0]) {
+        languageSelect.value = availableLanguages[0].code;
+      }
+    }
+
+    function renderCloneHint() {
+      const selectedLanguage = getSelectedLanguage();
+      if (!selectedLanguage) {
+        cloneHint.textContent = "Reference-audio cloning is currently unavailable.";
+        return;
+      }
+
+      const supportedLanguageNames = languages
+        .filter((language) => cloneSupportedLanguageCodes.has(language.code))
+        .map((language) => language.display_name);
+      cloneHint.textContent = `Reference-audio cloning is available for ${selectedLanguage.display_name}. Supported clone languages: ${supportedLanguageNames.join(", ")}.`;
+    }
+
+    function renderSpeakers() {
+      const selectedLanguage = getSelectedLanguage();
+      speakerSelect.innerHTML = "";
+
+      selectedLanguage.speakers.forEach((speaker) => {
+        const option = document.createElement("option");
+        option.value = speaker.name;
+        option.textContent = speaker.recommended ? `${speaker.name} • recommended` : speaker.name;
+        speakerSelect.appendChild(option);
+      });
+
+      const recommended = selectedLanguage.recommended_speakers.join(", ");
+      speakerHint.textContent = recommended
+        ? `Recommended for ${selectedLanguage.display_name}: ${recommended}`
+        : `All listed speakers are available for ${selectedLanguage.display_name}.`;
+
+      recommendedSpeakers.innerHTML = "";
+      selectedLanguage.recommended_speakers.forEach((speakerName) => {
+        const pill = document.createElement("span");
+        pill.className = "pill";
+        pill.textContent = `${selectedLanguage.display_name}: ${speakerName}`;
+        recommendedSpeakers.appendChild(pill);
+      });
+
+      renderCloneHint();
+    }
+
+    function setVoiceMode(mode) {
+      activeVoiceMode = mode;
+      const speakerMode = mode === "speaker";
+      const descriptionMode = mode === "description";
+      const cloneMode = mode === "clone";
+
+      renderLanguages();
+
+      speakerTab.classList.toggle("active", speakerMode);
+      descriptionTab.classList.toggle("active", descriptionMode);
+      cloneTab.classList.toggle("active", cloneMode);
+      speakerPanel.classList.toggle("active", speakerMode);
+      descriptionPanel.classList.toggle("active", descriptionMode);
+      clonePanel.classList.toggle("active", cloneMode);
+
+      speakerSelect.required = speakerMode;
+      voiceDescription.required = descriptionMode;
+      referenceAudioInput.required = cloneMode;
+      voiceModeValue.textContent = speakerMode
+        ? "Preset speaker"
+        : descriptionMode
+          ? "Custom description"
+          : "Voice clone";
+      renderSpeakers();
+      renderCloneHint();
+    }
+
+    function showStatus(message) {
+      statusBox.textContent = message;
+      statusBox.style.display = "block";
+    }
+
+    function hideStatus() {
+      statusBox.style.display = "none";
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.style.display = "block";
+    }
+
+    function abortOngoingRequest(message = "") {
+      if (currentRequestController) {
+        currentRequestController.abort();
+        currentRequestController = null;
+      }
+      if (message) {
+        showError(message);
+      }
+      setLoaderState(false);
+      hideStatus();
+      submitButton.disabled = true;
+      generationTimeValue.textContent = "Cancelled";
+      backendStateValue.textContent = "Disconnected";
+    }
+
+    function formatDurationFromMs(milliseconds) {
+      const totalSeconds = Math.max(0, Math.round(Number(milliseconds) / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function hideError() {
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
+
+    function setLoaderState(isLoading) {
+      loaderOverlay.classList.toggle("active", isLoading);
+    }
+
+    function updateBackendStatus(data, syncedAt = new Date()) {
+      backendStatusBadge.className = "badge";
+
+      if (data.status === "ok") {
+        backendStatusBadge.classList.add("badge-ready");
+        backendStatusBadge.textContent = data.generation_in_progress ? "Backend ready • generating" : "Backend ready";
+        backendStatusText.textContent = data.generation_in_progress
+          ? `Model loaded on ${data.device || "unknown device"} and currently generating audio.`
+          : `Model loaded on ${data.device || "unknown device"} and ready for new requests.`;
+        backendStateValue.textContent = data.generation_in_progress ? "Generating" : "Ready";
+      } else if (data.status === "error") {
+        backendStatusBadge.classList.add("badge-error");
+        backendStatusBadge.textContent = "Backend error";
+        backendStatusText.textContent = data.model_error || "Backend reported a loading error.";
+        backendStateValue.textContent = "Error";
+      } else {
+        backendStatusBadge.classList.add("badge-loading");
+        backendStatusBadge.textContent = "Backend loading";
+        backendStatusText.textContent = "Model is still loading. The page will keep syncing automatically.";
+        backendStateValue.textContent = "Loading";
+      }
+
+      lastSyncTime.textContent = syncedAt.toLocaleTimeString();
+      submitButton.disabled = data.status !== "ok" || data.generation_in_progress;
+    }
+
+    async function syncBackendHealth() {
+      if (!navigator.onLine) {
+        backendStatusBadge.className = "badge badge-error";
+        backendStatusBadge.textContent = "Frontend offline";
+        backendStatusText.textContent = "Internet connection is unavailable. Requests are paused until the connection returns.";
+        backendStateValue.textContent = "Offline";
+        lastSyncTime.textContent = "Offline";
+        submitButton.disabled = true;
+        return;
+      }
+
+      try {
+        const response = await fetch("/health", { cache: "no-store" });
+        const data = await response.json();
+        updateBackendStatus(data, new Date());
+      } catch (error) {
+        backendStatusBadge.className = "badge badge-error";
+        backendStatusBadge.textContent = "Backend unreachable";
+        backendStatusText.textContent = "Could not sync with the backend right now. The current request will stay stopped until the connection recovers.";
+        backendStateValue.textContent = "Offline";
+        lastSyncTime.textContent = "Sync failed";
+        submitButton.disabled = true;
+      }
+    }
+
+    function startHealthPolling() {
+      if (healthPollTimer) {
+        window.clearInterval(healthPollTimer);
+      }
+      healthPollTimer = window.setInterval(syncBackendHealth, 10000);
+    }
+
+    async function requestAudio(text, language, signal) {
+      if (activeVoiceMode === "clone") {
+        const file = referenceAudioInput.files[0];
+        if (!file) {
+          throw new Error("Upload a reference audio file to use clone mode.");
+        }
+
+        const payload = new FormData();
+        payload.append("text", text);
+        payload.append("language", language);
+        payload.append("reference_audio", file);
+
+        return fetch("/clone-voice", {
+          method: "POST",
+          body: payload,
+          signal,
+        });
+      }
+
+      const payload = {
+        text,
+        language,
+        voice_mode: activeVoiceMode,
+      };
+
+      if (activeVoiceMode === "speaker") {
+        payload.speaker = speakerSelect.value;
+      } else {
+        payload.voice_description = voiceDescription.value;
+      }
+
+      return fetch("/tts/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal,
+      });
+    }
+
+    speakerTab.addEventListener("click", () => setVoiceMode("speaker"));
+    descriptionTab.addEventListener("click", () => setVoiceMode("description"));
+    cloneTab.addEventListener("click", () => setVoiceMode("clone"));
+
+    languageSelect.addEventListener("change", () => {
+      renderSpeakers();
+      hideError();
+      resetAudio();
+    });
+
+    window.addEventListener("offline", () => {
+      abortOngoingRequest("Connection lost. The active generation request was cancelled.");
+      syncBackendHealth();
+    });
+
+    window.addEventListener("online", () => {
+      hideError();
+      syncBackendHealth();
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (currentRequestController) {
+        currentRequestController.abort();
+      }
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideError();
+      resetAudio();
+      submitButton.disabled = true;
+      setLoaderState(true);
+      showStatus("Generating speech. Please wait...");
+      generationTimeValue.textContent = "Generating...";
+      backendStateValue.textContent = "Generating";
+      currentRequestController = new AbortController();
+
+      try {
+        const response = await requestAudio(
+          document.getElementById("text").value,
+          languageSelect.value,
+          currentRequestController.signal,
+        );
+
+        if (!response.ok) {
+          let message = "Speech generation failed.";
+          try {
+            const data = await response.json();
+            message = data.detail || message;
+          } catch (error) {
+            message = response.statusText || message;
+          }
+          throw new Error(message);
+        }
+
+        const generationTimeMs = response.headers.get("X-Generation-Time-Ms");
+        generationTimeValue.textContent = generationTimeMs
+          ? formatDurationFromMs(generationTimeMs)
+          : "Completed";
+
+        const blob = await response.blob();
+        audioUrl = URL.createObjectURL(blob);
+        audioPlayer.src = audioUrl;
+        await audioPlayer.play().catch(() => undefined);
+      } catch (error) {
+        if (error.name === "AbortError") {
+          showError("Connection closed. Backend generation was asked to stop.");
+          generationTimeValue.textContent = "Cancelled";
+        } else {
+          showError(error.message || "Speech generation failed.");
+          generationTimeValue.textContent = "Failed";
+        }
+      } finally {
+        currentRequestController = null;
+        setLoaderState(false);
+        hideStatus();
+        await syncBackendHealth();
+      }
+    });
+
+    renderLanguages();
+    renderSpeakers();
+    setVoiceMode("speaker");
+    syncBackendHealth();
+    startHealthPolling();
+  </script>
+</body>
+</html>

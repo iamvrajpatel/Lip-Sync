@@ -113,6 +113,7 @@ opt_einsum==3.4.0
 orjson==3.11.8
 packaging==26.0
 pandas==3.0.2
+parler-tts
 pillow==11.3.0
 platformdirs==4.9.6
 pooch==1.9.0
@@ -167,6 +168,7 @@ torchaudio==2.2.2+cu121
 torchmetrics==1.9.0
 torchvision==0.17.2+cu121
 tqdm==4.67.3
+TTS
 transformers==4.31.0
 triton==2.2.0
 typeguard==4.5.1
